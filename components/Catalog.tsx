@@ -183,8 +183,8 @@ export default function Catalog() {
           <div className="mb-4 rounded-3xl border border-slate-200 bg-white/70 p-5 shadow-sm backdrop-blur sm:p-7">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Ten Peso Run</h1>
-                <p className="mt-1 text-sm text-slate-600">Grab snacks fast. Checkout as guest.</p>
+                <h1 className="text-2xl font-semibold tracking-tight text-slate-900">F.D.S "Final Destination Services" </h1>
+                <p className="mt-1 text-sm text-slate-600">Grab snacks fast. Checkout fast </p>
               </div>
 
               <div className="hidden sm:flex items-center gap-2">

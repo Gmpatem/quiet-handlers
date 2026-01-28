@@ -24,7 +24,7 @@ type CartItem = {
 
 const CART_KEY = "tenpesorun_cart_v1";
 const ALL = "All";
-const DEFAULT_CAT = "Noodles";
+const DEFAULT_CAT = "All";
 
 function peso(cents: number) {
   return new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format((cents ?? 0) / 100);
@@ -96,8 +96,8 @@ export default function Storefront({
   const settingOrder: string[] = Array.isArray(settings?.category_order) ? settings.category_order : [];
   const [categories, setCategories] = useState<string[]>([]);
   const [activeCat, setActiveCat] = useState<string>(() => {
-    const fromSettings = settingOrder?.[0];
-    return fromSettings || DEFAULT_CAT || ALL;
+    // ✅ default should be ALL
+    return ALL;
   });
 
   // Cache products per category (✅ TS-safe)
@@ -113,21 +113,47 @@ export default function Storefront({
   const [loading, setLoading] = useState<boolean>(false);
   const [loadErr, setLoadErr] = useState<string | null>(productsError ?? null);
 
-  // Build category list
+  // Build category list (✅ only categories that have items)
   useEffect(() => {
-    const catSet = new Set<string>();
-
-    for (const c of settingOrder ?? []) catSet.add(c);
-
     const all = cache[ALL] ?? [];
-    for (const p of all) catSet.add(normalizeCategory(p.category));
+    const counts = new Map<string, number>();
 
-    const arr = Array.from(catSet).filter(Boolean);
+    for (const p of all) {
+      const cat = normalizeCategory(p.category);
+      counts.set(cat, (counts.get(cat) ?? 0) + 1);
+    }
+
+    let arr = Array.from(counts.entries())
+      .filter(([, n]) => n > 0)
+      .map(([c]) => c);
+
+    // Optional: respect settings order, but only for categories that exist
+    if (settingOrder?.length) {
+      const ordered: string[] = [];
+      const seen = new Set<string>();
+
+      for (const s of settingOrder) {
+        const ns = normalizeCategory(s);
+        if (arr.includes(ns) && !seen.has(ns)) {
+          ordered.push(ns);
+          seen.add(ns);
+        }
+      }
+
+      for (const c of arr) {
+        if (!seen.has(c)) ordered.push(c);
+      }
+
+      arr = ordered;
+    } else {
+      arr.sort((a, b) => a.localeCompare(b));
+    }
 
     setCategories([ALL, ...arr]);
 
-    if (activeCat !== ALL && arr.length && !arr.includes(activeCat)) {
-      setActiveCat(arr.includes(DEFAULT_CAT) ? DEFAULT_CAT : arr[0]);
+    // ✅ If active category no longer exists, fall back to ALL
+    if (activeCat !== ALL && !arr.includes(activeCat)) {
+      setActiveCat(ALL);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settingOrder?.join("|"), cache[ALL]?.length]);
@@ -202,8 +228,9 @@ export default function Storefront({
     return list;
   }, [products]);
 
-  const heroTitle = (settings?.landing_hero_title ?? "TenPesoRun") as string;
-  const heroSubtitle = (settings?.landing_hero_subtitle ?? "Campus snacks, fast and simple.") as string;
+  // ✅ Rebrand defaults (still respects settings if you set them in DB)
+  const heroTitle = (settings?.landing_hero_title ?? "FDS") as string;
+  const heroSubtitle = (settings?.landing_hero_subtitle ?? "Final Destination Services") as string;
 
   return (
     <div className="min-h-screen">
@@ -212,11 +239,11 @@ export default function Storefront({
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
             <div className="grid h-9 w-9 place-items-center rounded-2xl bg-slate-900 text-xs font-semibold text-white shadow-sm">
-              TP
+              FDS
             </div>
             <div className="leading-tight">
               <div className="text-sm font-semibold text-slate-900">{heroTitle}</div>
-              <div className="text-xs text-slate-500">Campus convenience</div>
+              <div className="text-xs text-slate-500">Handling things. Quietly.</div>
             </div>
           </div>
 
@@ -348,9 +375,7 @@ export default function Storefront({
                       </div>
 
                       {low && (
-                        <div className="mt-1 text-[11px] font-medium text-amber-700">
-                          Limited stock, grab it now.
-                        </div>
+                        <div className="mt-1 text-[11px] font-medium text-amber-700">Limited stock, grab it now.</div>
                       )}
                     </div>
 
