@@ -12,6 +12,10 @@ export type OrderRow = {
   contact: string | null;
   notes: string | null;
   fulfillment: "pickup" | "delivery" | string;
+
+  // ✅ added
+  pickup_location: string | null;
+
   delivery_fee_cents: number;
   delivery_location: string | null;
   payment_method: "gcash" | "cod" | string;
@@ -59,6 +63,21 @@ function pillClass(kind: "good" | "warn" | "bad" | "neutral") {
   if (kind === "warn") return "bg-amber-50 text-amber-800";
   if (kind === "bad") return "bg-red-50 text-red-700";
   return "bg-slate-100 text-slate-700";
+}
+
+// ✅ display helper (works even if you change storage later)
+function pickupLabel(pickup_location: string | null, notes: string | null) {
+  const p = (pickup_location ?? "").toLowerCase();
+
+  if (p.includes("boys") || p.includes("411")) return "Boys dorm (Room 411)";
+  if (p.includes("girls") || p.includes("206")) return "Girls dorm (Room 206)";
+
+  // fallback: try to read from notes if older orders stored it there
+  const n = (notes ?? "").toLowerCase();
+  if (n.includes("boys dorm") || n.includes("room 411")) return "Boys dorm (Room 411)";
+  if (n.includes("girls dorm") || n.includes("room 206")) return "Girls dorm (Room 206)";
+
+  return "—";
 }
 
 // -------- payment_status enum mapping (no hardcoding) --------
@@ -114,7 +133,6 @@ export default function OrdersClient({
   const [payPaid, setPayPaid] = useState<string>("paid");
   const [payReject, setPayReject] = useState<string>("rejected");
 
-  // Fetch enum labels once (prevents invalid enum input forever)
   useEffect(() => {
     let cancelled = false;
 
@@ -182,10 +200,13 @@ export default function OrdersClient({
 
       if (!query) return true;
 
+      const pickup = pickupLabel(o.pickup_location, o.notes).toLowerCase();
+
       return (
         (o.order_code ?? "").toLowerCase().includes(query) ||
         (o.customer_name ?? "").toLowerCase().includes(query) ||
-        (o.contact ?? "").toLowerCase().includes(query)
+        (o.contact ?? "").toLowerCase().includes(query) ||
+        pickup.includes(query)
       );
     });
   }, [initialOrders, q, status, fulfillment, method]);
@@ -214,7 +235,6 @@ export default function OrdersClient({
     startTransition(async () => {
       const supabase = supabaseBrowser();
 
-      // find latest payment
       const { data: latest, error: findErr } = await supabase
         .from("payments")
         .select("id, created_at")
@@ -229,7 +249,6 @@ export default function OrdersClient({
         const { error } = await supabase.from("payments").update({ status: nextStatus }).eq("id", latest.id);
         if (error) return alert(`Failed: ${error.message}`);
       } else {
-        // create payment record if missing
         const { error } = await supabase.from("payments").insert({
           order_id: orderId,
           method: "gcash",
@@ -265,7 +284,7 @@ export default function OrdersClient({
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search code, name, contact..."
+          placeholder="Search code, name, pickup point..."
           className="rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 md:col-span-2"
         />
 
@@ -304,7 +323,7 @@ export default function OrdersClient({
             <tr className="border-b">
               <th className="px-4 py-3">Order</th>
               <th className="px-4 py-3">Customer</th>
-              <th className="px-4 py-3">Fulfillment</th>
+              <th className="px-4 py-3">Pickup point</th>
               <th className="px-4 py-3">Payment</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3 text-right">Total</th>
@@ -331,10 +350,8 @@ export default function OrdersClient({
                   </td>
 
                   <td className="px-4 py-3">
-                    <div className="font-medium">{String(o.fulfillment)}</div>
-                    {o.fulfillment === "delivery" && (
-                      <div className="text-xs text-slate-500">Fee: {peso(o.delivery_fee_cents ?? 0)}</div>
-                    )}
+                    <div className="font-medium">{pickupLabel(o.pickup_location, o.notes)}</div>
+                    <div className="text-xs text-slate-500">{String(o.fulfillment)}</div>
                   </td>
 
                   <td className="px-4 py-3">
@@ -352,10 +369,7 @@ export default function OrdersClient({
 
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-2">
-                      <button
-                        onClick={() => openOrder(o)}
-                        className="rounded-xl border border-slate-200 px-3 py-1.5 hover:bg-white"
-                      >
+                      <button onClick={() => openOrder(o)} className="rounded-xl border border-slate-200 px-3 py-1.5 hover:bg-white">
                         View
                       </button>
 
@@ -395,6 +409,7 @@ export default function OrdersClient({
         order={activeOrder}
         payments={activeOrder ? paymentsByOrder.get(activeOrder.id) ?? [] : []}
         onUpdateStatus={updateOrderStatus}
+        pickupLabel={(o) => pickupLabel(o.pickup_location, o.notes)}
       />
     </div>
   );

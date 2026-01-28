@@ -8,7 +8,9 @@ export default async function AdminOrdersPage() {
 
   const { data: orders, error } = await supabase
     .from("orders")
-    .select("id, order_code, customer_name, contact, notes, fulfillment, delivery_fee_cents, delivery_location, payment_method, subtotal_cents, total_cents, status, created_at, updated_at")
+    .select(
+      "id, order_code, customer_name, contact, notes, fulfillment, pickup_location, delivery_fee_cents, delivery_location, payment_method, subtotal_cents, total_cents, status, created_at, updated_at"
+    )
     .order("created_at", { ascending: false })
     .limit(200);
 
@@ -29,6 +31,7 @@ export default async function AdminOrdersPage() {
       .from("payments")
       .select("id, order_id, method, amount_cents, reference_number, status, created_at")
       .in("order_id", orderIds);
+
     payments = (pays ?? []) as any;
   }
 

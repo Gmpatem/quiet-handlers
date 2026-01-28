@@ -32,18 +32,21 @@ export default function OrderDrawer({
   order,
   payments,
   onUpdateStatus,
+  pickupLabel,
 }: {
   open: boolean;
   setOpen: (v: boolean) => void;
   order: OrderRow | null;
   payments: PaymentRow[];
   onUpdateStatus: (orderId: string, next: string) => void;
+
+  // ✅ injected formatter so we keep one logic source
+  pickupLabel: (o: OrderRow) => string;
 }) {
   const [isPending, startTransition] = useTransition();
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const supabase = useMemo(() => supabaseBrowser(), []);
 
-  // ✅ Guard + non-null alias for TypeScript
   if (!open || order === null) return null;
   const o = order;
 
@@ -62,7 +65,6 @@ export default function OrderDrawer({
 
     startTransition(async () => {
       try {
-        // Delete children first (avoid FK constraint issues)
         const { error: oiErr } = await supabase.from("order_items").delete().eq("order_id", o.id);
         if (oiErr) throw new Error(`order_items: ${oiErr.message}`);
 
@@ -81,20 +83,15 @@ export default function OrderDrawer({
 
   return (
     <div className="fixed inset-0 z-50">
-      {/* backdrop */}
       <button className="absolute inset-0 bg-black/30" onClick={() => setOpen(false)} aria-label="Close" />
 
-      {/* panel */}
       <div className="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-xl">
         <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
           <div>
             <div className="text-sm text-slate-500">Order</div>
             <div className="text-lg font-semibold">{o.order_code ?? o.id.slice(0, 8)}</div>
           </div>
-          <button
-            onClick={() => setOpen(false)}
-            className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm hover:bg-slate-50"
-          >
+          <button onClick={() => setOpen(false)} className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm hover:bg-slate-50">
             Close
           </button>
         </div>
@@ -102,12 +99,16 @@ export default function OrderDrawer({
         <div className="space-y-5 p-5">
           {isPending && <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">Working…</div>}
 
-          {/* Details */}
+          {/* Customer */}
           <div className="rounded-2xl border border-slate-200 p-4">
             <div className="text-sm font-semibold">Customer</div>
             <div className="mt-2 text-sm">
               <div className="font-medium">{o.customer_name ?? "—"}</div>
               <div className="text-slate-600">{o.contact ?? "—"}</div>
+
+              <div className="mt-2 text-slate-700">
+                <span className="text-slate-500">Pickup point:</span> {pickupLabel(o)}
+              </div>
 
               {o.delivery_location ? (
                 <div className="mt-2 text-slate-700">
@@ -125,7 +126,7 @@ export default function OrderDrawer({
             </div>
           </div>
 
-          {/* Money */}
+          {/* Totals */}
           <div className="rounded-2xl border border-slate-200 p-4">
             <div className="text-sm font-semibold">Totals</div>
             <div className="mt-2 space-y-1 text-sm">
@@ -170,7 +171,7 @@ export default function OrderDrawer({
           <div className="rounded-2xl border border-slate-200 p-4">
             <div className="text-sm font-semibold">Order status</div>
             <div className="mt-3 grid grid-cols-2 gap-2">
-              {["pending", "confirmed", "ready", "delivered", "cancelled"].map((s) => (
+              {["pending", "confirmed", "preparing", "ready", "delivered", "cancelled"].map((s) => (
                 <button
                   key={s}
                   onClick={() => onUpdateStatus(o.id, s)}
