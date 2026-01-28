@@ -32,3 +32,4 @@ npm run dev
 ## Notes
 - Product images bucket: `product-images` (public read; admin write)
 - Storefront + wizard text controlled via `app_settings` in Supabase
+# quiet-handlers
