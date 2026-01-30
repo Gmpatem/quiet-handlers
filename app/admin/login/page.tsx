@@ -37,18 +37,25 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6">
-      <div className="w-full max-w-md rounded-2xl border bg-white p-6 shadow-sm">
-        <h1 className="text-xl font-semibold">Admin Login</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Sign in to manage products, orders, settings, and analytics.
-        </p>
+    <div className="min-h-screen flex items-center justify-center p-6 bg-gradient-to-br from-stone-50 via-white to-amber-50/30">
+      <div className="w-full max-w-md rounded-2xl border border-stone-200 bg-white p-6 shadow-lg">
+        <div className="mb-6">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-stone-600 to-amber-900 font-bold text-white shadow-md">
+              FDS
+            </div>
+            <h1 className="text-xl font-semibold text-stone-900">Admin Login</h1>
+          </div>
+          <p className="text-sm text-stone-600">
+            Sign in to manage products, orders, settings, and analytics.
+          </p>
+        </div>
 
-        <form onSubmit={onSubmit} className="mt-6 space-y-4">
+        <form onSubmit={onSubmit} className="space-y-4">
           <div>
-            <label className="text-sm font-medium">Email</label>
+            <label className="text-sm font-medium text-stone-900">Email</label>
             <input
-              className="mt-1 w-full rounded-xl border px-3 py-2 outline-none focus:ring-2"
+              className="mt-1 w-full rounded-xl border border-stone-200 bg-white px-3 py-2 text-stone-900 outline-none transition focus:border-amber-700 focus:ring-2 focus:ring-amber-700/20"
               type="email"
               autoComplete="email"
               value={email}
@@ -59,9 +66,9 @@ export default function AdminLoginPage() {
           </div>
 
           <div>
-            <label className="text-sm font-medium">Password</label>
+            <label className="text-sm font-medium text-stone-900">Password</label>
             <input
-              className="mt-1 w-full rounded-xl border px-3 py-2 outline-none focus:ring-2"
+              className="mt-1 w-full rounded-xl border border-stone-200 bg-white px-3 py-2 text-stone-900 outline-none transition focus:border-amber-700 focus:ring-2 focus:ring-amber-700/20"
               type="password"
               autoComplete="current-password"
               value={password}
@@ -80,13 +87,13 @@ export default function AdminLoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-xl bg-black px-4 py-2 text-white disabled:opacity-60"
+            className="w-full rounded-xl bg-gradient-to-r from-amber-700 to-amber-900 px-4 py-2 font-semibold text-white shadow-md transition hover:from-amber-800 hover:to-amber-950 disabled:opacity-60"
           >
             {loading ? "Signing in..." : "Sign in"}
           </button>
 
-          <div className="text-xs text-gray-500">
-            Tip: only accounts with <code>profiles.is_admin = true</code> should access protected pages.
+          <div className="text-xs text-stone-500">
+            Tip: only accounts with <code className="rounded bg-stone-100 px-1.5 py-0.5 text-amber-800">profiles.is_admin = true</code> should access protected pages.
           </div>
         </form>
       </div>

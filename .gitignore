@@ -17,3 +17,21 @@ yarn-error.log*
 
 # misc
 .DS_Store
+# backups
+*.bak
+*.backup
+*.bak.*
+backup_*/
+.bak/
+
+# temp copies
+*.old
+*.tmp
+
+# backups
+*.bak
+*.backup
+*.bak.*
+backup_*/
+.bak/
+

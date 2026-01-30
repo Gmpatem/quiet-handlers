@@ -17,8 +17,16 @@ export default async function AdminOrdersPage() {
   if (error) {
     return (
       <div>
-        <h1 className="text-xl font-semibold">Orders</h1>
-        <p className="mt-2 text-sm text-red-600">Failed to load orders: {error.message}</p>
+        <h1 className="text-xl font-semibold text-stone-900">Orders</h1>
+        <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4">
+          <div className="flex items-start gap-3">
+            <span className="text-lg">⚠️</span>
+            <div>
+              <div className="font-semibold text-red-800">Failed to load orders</div>
+              <p className="mt-1 text-sm text-red-700">{error.message}</p>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

@@ -1,19 +1,24 @@
+import "@fontsource/inter/latin.css";
 import type { Metadata } from "next";
 import "./globals.css";
-import AuthHeal from "@/components/AuthHeal";
 
 export const metadata: Metadata = {
-  title: "tenpesorun",
-  description: "Campus snack ordering app (guest checkout) powered by Supabase.",
+  title: "FDS - Final Destination Services",
+  description: "Handling things. Quietly - Campus convenience powered by Supabase",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-white text-slate-900 antialiased">
-        <AuthHeal />
-        {children}
+      <body className="min-h-screen bg-gradient-to-b from-stone-50/30 via-white to-stone-50/20 font-sans antialiased">
+        <div className="relative min-h-screen p-4 sm:p-6 lg:p-8">{children}</div>
       </body>
     </html>
   );
 }
+
+

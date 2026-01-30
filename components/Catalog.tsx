@@ -1,449 +1,639 @@
 "use client";
 
-import Image from "next/image";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { cartSubtotalCents, loadCart, saveCart, upsertCartItem } from "@/lib/cart";
-import { formatPHP } from "@/lib/money";
 import { supabaseBrowser } from "@/lib/supabase/browser";
-import type { CartItem, Product } from "@/lib/types";
+import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { ArrowLeft, CheckCircle2, ShoppingBag, CreditCard, MapPin } from "lucide-react";
 
-type AppSettingRow = { key: string; value: any };
-
-const DEFAULT_CATEGORY_ORDER = [
-  "Drinks",
-  "Noodles",
-  "Snacks",
-  "Filling Snacks",
-  "Instant Meals",
-  "Stress & Sweet Snacks",
-  "Dorm Essential Boosters",
-  "Other",
-];
-
-const DEFAULT_FEATURED = ["Noodles", "Drinks", "Snacks"];
-
-const DEFAULT_ICONS: Record<string, string> = {
-  Drinks: "🥤",
-  Noodles: "🍜",
-  Snacks: "🍪",
-  "Filling Snacks": "🥪",
-  "Instant Meals": "🍛",
-  "Stress & Sweet Snacks": "🍫",
-  "Dorm Essential Boosters": "☕",
-  "Ice Cream": "🍦",
-  Combos: "🎁",
-  Other: "🧺",
+type CartItem = {
+  id: string;
+  name: string;
+  category?: string | null;
+  price_cents: number;
+  qty: number;
+  photo_url?: string | null;
 };
 
-function normalizeCategory(c?: string | null) {
-  const v = (c || "Other").trim();
-  return v || "Other";
+type ProductForSnapshot = {
+  id: string;
+  name: string;
+  category: string | null;
+  cost_cents: number;
+};
+
+const CART_KEY = "fds_cart_v1";
+
+function peso(cents: number) {
+  return new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format((cents ?? 0) / 100);
 }
 
-function sortCategories(categories: string[], order: string[]) {
-  const rank = new Map(order.map((c, i) => [c, i]));
-  return [...categories].sort((a, b) => {
-    const ra = rank.has(a) ? (rank.get(a) as number) : 9999;
-    const rb = rank.has(b) ? (rank.get(b) as number) : 9999;
-    if (ra !== rb) return ra - rb;
-    return a.localeCompare(b);
-  });
+function genOrderCode() {
+  const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  let s = "";
+  for (let i = 0; i < 6; i++) s += chars[Math.floor(Math.random() * chars.length)];
+  return `FDS-${s}`;
 }
 
-export default function Catalog() {
-  const supabase = useMemo(() => supabaseBrowser(), []);
-  const [products, setProducts] = useState<Product[]>([]);
+function genUUID() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function Field({ label, children }: any) {
+  return (
+    <div className="grid gap-2">
+      <div className="text-sm font-semibold text-slate-900">{label}</div>
+      {children}
+    </div>
+  );
+}
+
+function pickPendingLabel(labels: string[]) {
+  const lower = labels.map((x) => x.toLowerCase());
+  const i = lower.findIndex((s) => s.includes("pending"));
+  if (i >= 0) return labels[i];
+
+  const j = lower.findIndex((s) => s.includes("unpaid") || s.includes("await"));
+  if (j >= 0) return labels[j];
+
+  return labels[0] ?? "pending";
+}
+
+export default function CheckoutPage() {
+  const [isPending, startTransition] = useTransition();
+
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const cartCount = useMemo(() => cart.reduce((a, i) => a + i.qty, 0), [cart]);
+  const subtotalCents = useMemo(() => cart.reduce((a, i) => a + i.qty * i.price_cents, 0), [cart]);
 
-  const [categoryOrder, setCategoryOrder] = useState<string[]>(DEFAULT_CATEGORY_ORDER);
-  const [featuredCategories, setFeaturedCategories] = useState<string[]>(DEFAULT_FEATURED);
-  const [categoryIcons, setCategoryIcons] = useState<Record<string, string>>(DEFAULT_ICONS);
+  const [deliveryFeeCents, setDeliveryFeeCents] = useState<number>(1500);
+  const [enableGCash, setEnableGCash] = useState(true);
+  const [enableCOD, setEnableCOD] = useState(true);
+  const [enableDelivery, setEnableDelivery] = useState(true);
+  const [enablePickup, setEnablePickup] = useState(true);
 
-  const ALL = "All";
-  const DEFAULT_CAT = "Noodles";
-  const [activeCat, setActiveCat] = useState<string>(DEFAULT_CAT);
+  const [gcashName, setGcashName] = useState<string>("");
+  const [gcashNumber, setGcashNumber] = useState<string>("");
+  const [gcashInstructions, setGcashInstructions] = useState<string>("");
+
+  const [paymentStatusLabels, setPaymentStatusLabels] = useState<string[]>([]);
+  const [paymentStatusDefault, setPaymentStatusDefault] = useState<string>("");
+
+  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1);
+
+  const [customerName, setCustomerName] = useState("");
+  const contact = "N/A";
+  const fulfillment: "pickup" | "delivery" = "pickup";
+  const [pickupPoint, setPickupPoint] = useState<"boys" | "girls" | "">("");
+
+  const [locationType, setLocationType] = useState<"house" | "room" | "other" | "">("");
+  const [deliveryLocation, setDeliveryLocation] = useState("");
+  const [notes, setNotes] = useState("");
+
+  const [paymentMethod, setPaymentMethod] = useState<"gcash" | "cod" | "">("");
+  const [gcashRef, setGcashRef] = useState("");
+
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const feeCents = 0;
+  const totalCents = subtotalCents + feeCents;
 
   useEffect(() => {
-    setCart(loadCart());
+    try {
+      const raw = localStorage.getItem(CART_KEY);
+      if (raw) setCart(JSON.parse(raw));
+    } catch {}
   }, []);
 
   useEffect(() => {
-    saveCart(cart);
-  }, [cart]);
-
-  useEffect(() => {
-    let cancelled = false;
-
     (async () => {
-      setLoading(true);
-      setError(null);
+      const supabase = supabaseBrowser();
 
-      try {
-        const { data: settingsRows, error: sErr } = await supabase.from("app_settings").select("key,value");
-        if (!sErr && settingsRows) {
-          const map: Record<string, any> = {};
-          for (const r of settingsRows as AppSettingRow[]) map[r.key] = r.value;
+      const keys = [
+        "delivery_fee_cents",
+        "enable_gcash",
+        "enable_cod",
+        "enable_delivery",
+        "enable_pickup",
+        "gcash_enabled",
+        "gcash_name",
+        "gcash_number",
+        "gcash_instructions",
+      ];
 
-          if (Array.isArray(map.category_order)) setCategoryOrder(map.category_order);
-          if (Array.isArray(map.featured_categories)) setFeaturedCategories(map.featured_categories);
-          if (map.category_icons && typeof map.category_icons === "object") setCategoryIcons(map.category_icons);
-        }
-      } catch {}
+      const { data, error } = await supabase.from("app_settings").select("key, value").in("key", keys);
+      if (!error) {
+        const map: Record<string, any> = {};
+        for (const row of data ?? []) map[row.key] = row.value;
 
-      const { data, error } = await supabase
-        .from("products")
-        .select("id,name,category,price_cents,stock_qty,is_active,photo_url")
-        .eq("is_active", true)
-        .order("category", { ascending: true })
-        .order("name", { ascending: true });
+        if (typeof map.delivery_fee_cents === "number") setDeliveryFeeCents(map.delivery_fee_cents);
+        if (typeof map.enable_gcash === "boolean") setEnableGCash(map.enable_gcash);
+        if (typeof map.enable_cod === "boolean") setEnableCOD(map.enable_cod);
+        if (typeof map.enable_delivery === "boolean") setEnableDelivery(map.enable_delivery);
+        if (typeof map.enable_pickup === "boolean") setEnablePickup(map.enable_pickup);
 
-      if (cancelled) return;
-
-      if (error) {
-        setError(error.message);
-        setProducts([]);
-      } else {
-        setProducts((data ?? []) as Product[]);
+        if (typeof map.gcash_enabled === "boolean") setEnableGCash(map.gcash_enabled);
+        if (typeof map.gcash_name === "string") setGcashName(map.gcash_name);
+        if (typeof map.gcash_number === "string") setGcashNumber(map.gcash_number);
+        if (typeof map.gcash_instructions === "string") setGcashInstructions(map.gcash_instructions);
       }
 
-      setLoading(false);
+      const { data: enumArr, error: enumErr } = await supabase.rpc("get_payment_status_enum");
+      if (!enumErr && Array.isArray(enumArr) && enumArr.length > 0) {
+        const labels = enumArr.map(String);
+        setPaymentStatusLabels(labels);
+        setPaymentStatusDefault(pickPendingLabel(labels));
+      } else {
+        setPaymentStatusDefault("pending");
+      }
     })();
+  }, []);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [supabase]);
+  const empty = cart.length === 0;
 
-  const subtotal = cartSubtotalCents(cart);
-  const cartCount = cart.reduce((s, it) => s + it.qty, 0);
+  function next() {
+    setErrorMsg(null);
 
-  function bump(p: Product, delta: number) {
-    const out = !p.is_active || (p.stock_qty ?? 0) <= 0;
-    if (delta > 0 && out) return;
-    setCart((prev) => upsertCartItem(prev, p, delta));
+    if (step === 1) {
+      if (!customerName.trim()) return setErrorMsg("Please enter your name.");
+      return setStep(2);
+    }
+
+    if (step === 2) {
+      if (!pickupPoint) return setErrorMsg("Please choose a pickup point (Boys or Girls dorm).");
+      return setStep(4);
+    }
+
+    if (step === 3) {
+      return setStep(4);
+    }
+
+    if (step === 4) {
+      if (!paymentMethod) return setErrorMsg("Please choose a payment method.");
+      if (paymentMethod === "gcash" && !gcashRef.trim())
+        return setErrorMsg("Please enter your GCash reference number (or TO-FOLLOW).");
+      return setStep(5);
+    }
   }
 
-  const { cats, grouped } = useMemo(() => {
-    const m = new Map<string, Product[]>();
+  function back() {
+    setErrorMsg(null);
+    if (step === 2) return setStep(1);
+    if (step === 4) return setStep(2);
+    if (step === 5) return setStep(4);
+  }
 
-    for (const p of products ?? []) {
-      const cat = normalizeCategory(p.category);
-      const arr = m.get(cat) ?? [];
-      arr.push(p);
-      m.set(cat, arr);
+  async function placeOrder() {
+    setErrorMsg(null);
+
+    if (empty) return setErrorMsg("Your cart is empty.");
+    if (!paymentStatusDefault) return setErrorMsg("Loading settings… please try again.");
+    if (!customerName.trim()) return setErrorMsg("Please enter your name.");
+    if (!pickupPoint) return setErrorMsg("Please choose a pickup point (Boys or Girls dorm).");
+    if (!paymentMethod) return setErrorMsg("Please choose a payment method.");
+    if (paymentMethod === "gcash" && !gcashRef.trim()) {
+      return setErrorMsg("Please enter your GCash reference number (or TO-FOLLOW).");
     }
 
-    for (const [cat, arr] of m.entries()) {
-      arr.sort((a, b) => {
-        const ao = !a.is_active || (a.stock_qty ?? 0) <= 0 ? 1 : 0;
-        const bo = !b.is_active || (b.stock_qty ?? 0) <= 0 ? 1 : 0;
-        if (ao !== bo) return ao - bo;
-        return (a.name ?? "").localeCompare(b.name ?? "");
-      });
-      m.set(cat, arr);
-    }
+    startTransition(async () => {
+      try {
+        const supabase = supabaseBrowser();
 
-    const ordered = sortCategories(Array.from(m.keys()), categoryOrder);
-    return { cats: ordered, grouped: m };
-  }, [products, categoryOrder]);
+        const ids = cart.map((c) => c.id);
+        const { data: prods, error: pErr } = await supabase
+          .from("products")
+          .select("id, name, category, cost_cents")
+          .in("id", ids);
 
-  useEffect(() => {
-    if (!cats.length) return;
+        if (pErr) throw new Error(pErr.message);
 
-    if (activeCat !== ALL && !cats.includes(activeCat)) {
-      if (cats.includes(DEFAULT_CAT)) setActiveCat(DEFAULT_CAT);
-      else setActiveCat(cats[0]);
-    }
-  }, [cats, activeCat]);
+        const byId = new Map<string, ProductForSnapshot>();
+        for (const p of (prods ?? []) as any[]) {
+          byId.set(p.id, { id: p.id, name: p.name, category: p.category ?? null, cost_cents: p.cost_cents ?? 0 });
+        }
 
-  useEffect(() => {
-    if (!cats.length) return;
-    if (cats.includes(DEFAULT_CAT)) setActiveCat(DEFAULT_CAT);
-  }, [cats.length]);
+        const order_id = genUUID();
+        const order_code = genOrderCode();
 
-  const categoryCount = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const c of cats) m.set(c, (grouped.get(c) ?? []).length);
-    return m;
-  }, [cats, grouped]);
+        const pickupLabel =
+          pickupPoint === "boys"
+            ? "Pickup: Boys dorm (Room 411)"
+            : pickupPoint === "girls"
+              ? "Pickup: Girls dorm (Room 206)"
+              : "";
 
-  const visibleCats = useMemo(() => {
-    if (activeCat === ALL) return cats;
-    return cats.includes(activeCat) ? [activeCat] : cats;
-  }, [cats, activeCat]);
+        const mergedNotes = [pickupLabel, notes.trim()].filter(Boolean).join(" | ") || null;
+
+        const { error: oErr } = await supabase.from("orders").insert({
+          id: order_id,
+          order_code,
+          customer_name: customerName.trim(),
+          contact,
+          notes: mergedNotes,
+          fulfillment: fulfillment,
+          pickup_location: pickupPoint === "boys" ? "boys_411" : pickupPoint === "girls" ? "girls_206" : null,
+          delivery_fee_cents: 0,
+          delivery_location: null,
+          payment_method: paymentMethod,
+          subtotal_cents: subtotalCents,
+          total_cents: totalCents,
+          status: "pending",
+        });
+
+        if (oErr) throw new Error(oErr.message);
+
+        const itemsPayload = cart.map((c) => {
+          const snap = byId.get(c.id);
+          return {
+            order_id,
+            product_id: c.id,
+            name_snapshot: c.name,
+            category_snapshot: snap?.category ?? c.category ?? null,
+            unit_price_cents: c.price_cents,
+            unit_cost_cents: snap?.cost_cents ?? 0,
+            qty: c.qty,
+            line_total_cents: c.qty * c.price_cents,
+          };
+        });
+
+        const { error: oiErr } = await supabase.from("order_items").insert(itemsPayload);
+        if (oiErr) throw new Error(oiErr.message);
+
+        const paymentPayload: any = {
+          order_id,
+          method: paymentMethod,
+          amount_cents: totalCents,
+          reference_number: paymentMethod === "gcash" ? gcashRef.trim() : null,
+          status: paymentStatusDefault,
+        };
+
+        const { error: payErr } = await supabase.from("payments").insert(paymentPayload);
+        if (payErr) throw new Error(payErr.message);
+
+        try {
+          localStorage.removeItem(CART_KEY);
+        } catch {}
+
+        window.location.href = `/order/success/${order_code}`;
+      } catch (e: any) {
+        setErrorMsg(e?.message ?? "Failed to place order.");
+      }
+    });
+  }
+
+  const stepLabels = ["Customer", "Fulfillment", "Location", "Payment", "Review"];
+  const progressPct = ((step - 1) / 4) * 100;
+
+  const fulfillmentText =
+    pickupPoint === "boys" ? "Boys dorm (Room 411)" : pickupPoint === "girls" ? "Girls dorm (Room 206)" : "—";
 
   return (
-    <div className="container-app">
-      <div className="flex flex-col gap-6 lg:flex-row">
-        <div className="flex-1">
-          {/* Header */}
-          <div className="mb-4 rounded-3xl border border-slate-200 bg-white/70 p-5 shadow-sm backdrop-blur sm:p-7">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h1 className="text-2xl font-semibold tracking-tight text-slate-900">F.D.S "Final Destination Services" </h1>
-                <p className="mt-1 text-sm text-slate-600">Grab snacks fast. Checkout fast </p>
-              </div>
-
-              <div className="hidden sm:flex items-center gap-2">
-                <Link
-                  href="/checkout"
-                  className={[
-                    "rounded-xl px-3 py-2 text-sm font-semibold shadow-sm border border-slate-200 bg-white hover:bg-slate-50",
-                    cart.length === 0 ? "pointer-events-none opacity-50" : "",
-                  ].join(" ")}
-                >
-                  Checkout
-                </Link>
-                <Link
-                  href="/admin"
-                  className="rounded-xl px-3 py-2 text-sm font-semibold shadow-sm border border-slate-200 bg-white hover:bg-slate-50"
-                >
-                  Admin
-                </Link>
-              </div>
-            </div>
-          </div>
-
-          {/* Category filter bar */}
-          {!loading && !error && cats.length > 0 && (
-            <div className="sticky top-0 z-10 -mx-1 mb-4 border-b border-slate-200 bg-white/75 px-1 py-2 backdrop-blur">
-              <div className="flex gap-2 overflow-x-auto pb-1">
-                <button
-                  onClick={() => setActiveCat(ALL)}
-                  className={[
-                    "shrink-0 rounded-full border px-4 py-2 text-sm font-semibold shadow-sm transition",
-                    activeCat === ALL
-                      ? "border-slate-900 bg-slate-900 text-white"
-                      : "border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300",
-                  ].join(" ")}
-                  aria-pressed={activeCat === ALL}
-                  title="All"
-                >
-                  <span className="inline-flex items-center gap-2">
-                    <span className="text-base">✨</span>
-                    <span className="hidden sm:inline">All</span>
-                    <span className={activeCat === ALL ? "text-xs text-white/80" : "text-xs text-slate-500"}>
-                      {products.length}
-                    </span>
-                  </span>
-                </button>
-
-                {cats.map((c) => {
-                  const active = activeCat === c;
-                  return (
-                    <button
-                      key={c}
-                      onClick={() => setActiveCat(c)}
-                      className={[
-                        "shrink-0 rounded-full border px-4 py-2 text-sm font-semibold shadow-sm transition",
-                        active
-                          ? "border-slate-900 bg-slate-900 text-white"
-                          : "border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300",
-                      ].join(" ")}
-                      aria-pressed={active}
-                      title={c}
-                    >
-                      <span className="inline-flex items-center gap-2">
-                        <span className="text-base">{categoryIcons[c] ?? "🧺"}</span>
-                        <span className="hidden sm:inline">{c}</span>
-                        <span className={active ? "text-xs text-white/80" : "text-xs text-slate-500"}>
-                          {categoryCount.get(c) ?? 0}
-                        </span>
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {activeCat !== ALL && (
-                <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
-                  <span>
-                    Showing <span className="font-semibold text-slate-700">{activeCat}</span> only
-                  </span>
-                  <button
-                    onClick={() => setActiveCat(ALL)}
-                    className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
-                  >
-                    Clear
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Featured categories */}
-          {activeCat === ALL && !loading && !error && cats.length > 0 && (
-            <div className="mb-4">
-              <div className="text-sm font-semibold text-slate-900">Quick picks</div>
-              <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
-                {featuredCategories
-                  .filter((c) => cats.includes(c))
-                  .map((c) => (
-                    <button
-                      key={c}
-                      onClick={() => setActiveCat(c)}
-                      className="shrink-0 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 hover:border-slate-300"
-                    >
-                      <span className="mr-1">{categoryIcons[c] ?? "🧺"}</span>
-                      {c}
-                    </button>
-                  ))}
-              </div>
-            </div>
-          )}
-
-          {loading && <p className="text-sm text-slate-600">Loading products…</p>}
-
-          {error && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
-
-          {!loading && !error && cats.length === 0 && (
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <p className="text-sm text-slate-600">No products yet. Add some from Admin.</p>
-            </div>
-          )}
-
-          <div className="space-y-10">
-            {visibleCats.map((cat) => {
-              const items = grouped.get(cat) ?? [];
-              const sectionId = `cat-${cat.replace(/\s+/g, "-")}`;
-
-              return (
-                <section key={cat} id={sectionId} className="scroll-mt-24">
-                  <div className="flex items-end justify-between">
-                    <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-slate-600">
-                      <span className="text-base">{categoryIcons[cat] ?? "🧺"}</span>
-                      {cat}
-                    </h2>
-                    <div className="text-xs text-slate-500">{items.length} item(s)</div>
-                  </div>
-                  <div className="mt-3 h-px w-full bg-slate-100" />
-
-                  <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                    {items.map((p) => {
-                      const inCart = cart.find((x) => x.product.id === p.id)?.qty ?? 0;
-                      const out = !p.is_active || (p.stock_qty ?? 0) <= 0;
-
-                      return (
-                        <div
-                          key={p.id}
-                          className={[
-                            "group rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition hover:shadow-md hover:border-slate-300",
-                            out ? "opacity-70" : "",
-                          ].join(" ")}
-                        >
-                          <div className="relative aspect-square overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
-                            {p.photo_url ? (
-                              <Image src={p.photo_url} alt={p.name} fill className="object-cover transition duration-300 group-hover:scale-[1.02]" />
-                            ) : (
-                              <div className="flex h-full w-full items-center justify-center text-xs text-slate-400">
-                                no image
-                              </div>
-                            )}
-                            {out && (
-                              <div className="absolute inset-0 flex items-center justify-center bg-white/70 text-xs font-semibold text-slate-700">
-                                Out of stock
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="mt-3">
-                            <div className="line-clamp-2 text-sm font-semibold text-slate-900">{p.name}</div>
-                            <div className="mt-1 flex items-center justify-between">
-                              <div className="text-sm font-semibold text-slate-900">{formatPHP(p.price_cents)}</div>
-                              <span
-                                className={[
-                                  "rounded-full border px-2 py-0.5 text-[11px] font-medium",
-                                  out ? "border-rose-200 bg-rose-50 text-rose-700" : "border-slate-200 bg-slate-50 text-slate-600",
-                                ].join(" ")}
-                              >
-                                {out ? "Out" : `Stock: ${p.stock_qty ?? 0}`}
-                              </span>
-                            </div>
-
-                            <div className="mt-3 flex items-center justify-between gap-2">
-                              <button
-                                className="h-9 w-9 rounded-xl border border-slate-200 text-lg shadow-sm hover:bg-slate-50 disabled:opacity-40"
-                                onClick={() => bump(p, -1)}
-                                disabled={inCart <= 0}
-                                aria-label="remove"
-                              >
-                                –
-                              </button>
-                              <div className="text-sm font-semibold tabular-nums">{inCart}</div>
-                              <button
-                                className="h-9 w-9 rounded-xl border border-slate-200 text-lg shadow-sm hover:bg-slate-50 disabled:opacity-40"
-                                onClick={() => bump(p, 1)}
-                                disabled={out}
-                                aria-label="add"
-                              >
-                                +
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </section>
-              );
-            })}
-          </div>
+    <div className="min-h-screen bg-gradient-to-b from-amber-50/30 to-white">
+      {/* Header */}
+      <header className="sticky top-0 z-30 border-b border-slate-200/70 bg-white/90 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3 sm:px-6">
+          <Button variant="outline" asChild className="gap-2">
+            <Link href="/">
+              <ArrowLeft className="h-4 w-4" />
+              Back to store
+            </Link>
+          </Button>
+          <Badge variant="secondary" className="hidden sm:inline-flex">
+            {cartCount ? `${cartCount} item(s)` : "Empty"}
+          </Badge>
         </div>
+      </header>
 
-        {/* Cart summary */}
-        <aside className="lg:w-[340px]">
-          <div className="sticky top-20 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-            <div className="p-5">
-              <div className="flex items-center justify-between">
-                <div className="text-sm font-semibold">Cart</div>
-                <div className="text-xs text-slate-500">{cartCount} item(s)</div>
+      <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-8">
+        <Card className="overflow-hidden shadow-lg">
+          <CardHeader className="space-y-4 bg-gradient-to-br from-amber-50 to-white p-6 sm:p-8">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-2">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-md">
+                    <ShoppingBag className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h1 className="text-2xl font-bold tracking-tight text-slate-900">Checkout</h1>
+                    <p className="text-sm text-slate-600">Fast campus order, no account needed</p>
+                  </div>
+                </div>
               </div>
 
-              <div className="mt-4 space-y-2">
-                {cart.length === 0 && <p className="text-sm text-slate-600">Empty for now.</p>}
-                {cart.slice(0, 6).map((it) => (
-                  <div key={it.product.id} className="flex items-start justify-between gap-2 text-sm">
-                    <div className="flex-1">
-                      <div className="line-clamp-1 font-medium">{it.product.name}</div>
-                      <div className="text-xs text-slate-500">
-                        {it.qty} × {formatPHP(it.product.price_cents)}
+              <div className="hidden text-right sm:block">
+                <div className="text-xs text-slate-500">Step</div>
+                <div className="text-sm font-semibold text-slate-900">{step} / 5</div>
+              </div>
+            </div>
+
+            {/* Progress */}
+            {!empty && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs text-slate-500">
+                  <span className="font-medium text-slate-700">{stepLabels[step - 1]}</span>
+                  <span>{Math.round(progressPct)}%</span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-amber-500 to-orange-500 transition-all duration-300"
+                    style={{ width: `${progressPct}%` }}
+                  />
+                </div>
+              </div>
+            )}
+          </CardHeader>
+
+          <CardContent className="p-6 sm:p-8">
+            {empty ? (
+              <div className="rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 p-8 text-center">
+                <ShoppingBag className="mx-auto h-12 w-12 text-slate-400" />
+                <h3 className="mt-4 font-semibold text-slate-900">Your cart is empty</h3>
+                <p className="mt-2 text-sm text-slate-500">
+                  <Link className="font-semibold text-amber-600 hover:text-amber-700" href="/">
+                    Go back to the store
+                  </Link>{" "}
+                  to add items.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {errorMsg && (
+                  <div className="rounded-xl border-2 border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                    {errorMsg}
+                  </div>
+                )}
+
+                {/* STEP 1: NAME */}
+                {step === 1 && (
+                  <div className="space-y-4">
+                    <Field label="Your name">
+                      <input
+                        value={customerName}
+                        onChange={(e) => setCustomerName(e.target.value)}
+                        placeholder="e.g. Juan D."
+                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20"
+                      />
+                    </Field>
+                  </div>
+                )}
+
+                {/* STEP 2: PICKUP LOCATION */}
+                {step === 2 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                      <MapPin className="h-4 w-4" />
+                      Pickup location
+                    </div>
+
+                    <div className="grid gap-3">
+                      <button
+                        disabled={!enablePickup}
+                        onClick={() => setPickupPoint("boys")}
+                        className={[
+                          "touch-target rounded-xl border-2 p-4 text-left shadow-sm transition-all",
+                          pickupPoint === "boys"
+                            ? "border-amber-500 bg-amber-50 ring-2 ring-amber-500/20"
+                            : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50",
+                          !enablePickup ? "cursor-not-allowed opacity-50" : "",
+                        ].join(" ")}
+                      >
+                        <div className="font-semibold text-slate-900">Boys Dorm</div>
+                        <div className="text-sm text-slate-600">Room 411</div>
+                      </button>
+
+                      <button
+                        disabled={!enablePickup}
+                        onClick={() => setPickupPoint("girls")}
+                        className={[
+                          "touch-target rounded-xl border-2 p-4 text-left shadow-sm transition-all",
+                          pickupPoint === "girls"
+                            ? "border-amber-500 bg-amber-50 ring-2 ring-amber-500/20"
+                            : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50",
+                          !enablePickup ? "cursor-not-allowed opacity-50" : "",
+                        ].join(" ")}
+                      >
+                        <div className="font-semibold text-slate-900">Girls Dorm</div>
+                        <div className="text-sm text-slate-600">Room 206</div>
+                      </button>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 opacity-75">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="font-semibold text-slate-900">Delivery</div>
+                          <div className="text-sm text-slate-600">Campus delivery to your location</div>
+                        </div>
+                        <Badge variant="secondary" className="bg-amber-100 text-amber-800">
+                          Coming soon
+                        </Badge>
                       </div>
                     </div>
-                    <div className="tabular-nums font-semibold">{formatPHP(it.product.price_cents * it.qty)}</div>
                   </div>
-                ))}
-                {cart.length > 6 && <div className="text-xs text-slate-500">+ {cart.length - 6} more…</div>}
-              </div>
-            </div>
+                )}
 
-            <div className="border-t border-slate-200 bg-slate-50/60 p-5">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-600">Subtotal</span>
-                <span className="font-semibold tabular-nums">{formatPHP(subtotal)}</span>
-              </div>
+                {/* STEP 3: NOT USED */}
+                {step === 3 && (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                    Delivery location is currently disabled.
+                  </div>
+                )}
 
-              <Link
-                href="/checkout"
-                className={[
-                  "mt-4 inline-flex h-11 w-full items-center justify-center rounded-2xl bg-slate-900 text-sm font-semibold text-white shadow-sm",
-                  cart.length === 0 ? "pointer-events-none opacity-40" : "hover:bg-slate-800",
-                ].join(" ")}
-              >
-                Checkout
-              </Link>
+                {/* STEP 4: PAYMENT */}
+                {step === 4 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                      <CreditCard className="h-4 w-4" />
+                      Payment method
+                    </div>
 
-              <div className="mt-2 text-center text-xs text-slate-500">
-                Admin?{" "}
-                <Link href="/admin" className="font-semibold underline">
-                  Go to dashboard
-                </Link>
+                    <div className="grid gap-3">
+                      <button
+                        disabled={!enableGCash}
+                        onClick={() => setPaymentMethod("gcash")}
+                        className={[
+                          "touch-target rounded-xl border-2 p-4 text-left shadow-sm transition-all",
+                          paymentMethod === "gcash"
+                            ? "border-amber-500 bg-amber-50 ring-2 ring-amber-500/20"
+                            : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50",
+                          !enableGCash ? "cursor-not-allowed opacity-50" : "",
+                        ].join(" ")}
+                      >
+                        <div className="font-semibold text-slate-900">GCash</div>
+                        <div className="text-sm text-slate-600">Pay via GCash (enter ref)</div>
+                      </button>
+
+                      <button
+                        disabled={!enableCOD}
+                        onClick={() => setPaymentMethod("cod")}
+                        className={[
+                          "touch-target rounded-xl border-2 p-4 text-left shadow-sm transition-all",
+                          paymentMethod === "cod"
+                            ? "border-amber-500 bg-amber-50 ring-2 ring-amber-500/20"
+                            : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50",
+                          !enableCOD ? "cursor-not-allowed opacity-50" : "",
+                        ].join(" ")}
+                      >
+                        <div className="font-semibold text-slate-900">Cash on Pickup</div>
+                        <div className="text-sm text-slate-600">Pay when you receive it</div>
+                      </button>
+                    </div>
+
+                    {paymentMethod === "gcash" && (
+                      <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                        <div className="text-sm font-semibold text-amber-900">GCash payment details</div>
+
+                        <div className="mt-3 space-y-2 text-sm">
+                          <div className="flex justify-between gap-3">
+                            <span className="text-amber-700">Name</span>
+                            <span className="font-semibold text-amber-900">{gcashName || "—"}</span>
+                          </div>
+                          <div className="flex justify-between gap-3">
+                            <span className="text-amber-700">Number</span>
+                            <span className="font-semibold text-amber-900">{gcashNumber || "—"}</span>
+                          </div>
+                          <div className="flex justify-between gap-3">
+                            <span className="text-amber-700">Amount</span>
+                            <span className="font-semibold text-amber-900">{peso(totalCents)}</span>
+                          </div>
+                        </div>
+
+                        {gcashInstructions ? (
+                          <p className="mt-3 text-xs text-amber-700">{gcashInstructions}</p>
+                        ) : (
+                          <p className="mt-3 text-xs text-amber-700">
+                            Send exact amount, then enter your reference number.
+                          </p>
+                        )}
+
+                        <div className="mt-4">
+                          <label className="text-xs font-semibold text-amber-900">GCash reference number</label>
+                          <input
+                            value={gcashRef}
+                            onChange={(e) => setGcashRef(e.target.value)}
+                            placeholder="Enter reference number"
+                            className="mt-1 w-full rounded-xl border border-amber-300 bg-white px-4 py-3 text-sm shadow-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20"
+                          />
+                          <div className="mt-1 text-xs text-amber-700">
+                            If you'll pay after placing the order, enter{" "}
+                            <span className="font-semibold">TO-FOLLOW</span>.
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* STEP 5: REVIEW */}
+                {step === 5 && (
+                  <div className="space-y-4">
+                    <div className="text-sm font-semibold text-slate-900">Review your order</div>
+
+                    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                      <div className="text-sm font-semibold text-slate-900">{customerName}</div>
+                      <div className="mt-1 text-sm text-slate-600">
+                        Pickup • <span className="font-semibold">{fulfillmentText}</span>
+                      </div>
+                      <div className="mt-2 text-sm text-slate-600">
+                        Payment: <span className="font-semibold">{paymentMethod.toUpperCase()}</span>
+                        {paymentMethod === "gcash" && gcashRef ? ` • Ref: ${gcashRef}` : ""}
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                      <div className="text-sm font-semibold text-slate-900">Items</div>
+                      <div className="mt-3 space-y-2">
+                        {cart.map((i) => (
+                          <div key={i.id} className="flex justify-between text-sm">
+                            <div className="text-slate-700">
+                              {i.qty}× {i.name}
+                            </div>
+                            <div className="font-semibold tabular-nums text-slate-900">
+                              {peso(i.qty * i.price_cents)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <Separator className="my-3" />
+
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-slate-600">Subtotal</span>
+                          <span className="font-semibold tabular-nums text-slate-900">{peso(subtotalCents)}</span>
+                        </div>
+
+                        <div className="flex justify-between text-base">
+                          <span className="font-semibold text-slate-900">Total</span>
+                          <span className="font-bold tabular-nums text-slate-900">{peso(totalCents)}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <Button
+                      disabled={isPending}
+                      onClick={placeOrder}
+                      className="w-full touch-target bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:from-amber-600 hover:to-orange-600"
+                      size="lg"
+                    >
+                      {isPending ? (
+                        "Placing order…"
+                      ) : (
+                        <>
+                          <CheckCircle2 className="mr-2 h-5 w-5" />
+                          Place order
+                        </>
+                      )}
+                    </Button>
+
+                    <p className="text-center text-xs text-slate-500">
+                      After placing, you'll be redirected to your order success page.
+                    </p>
+                  </div>
+                )}
               </div>
-            </div>
-          </div>
-        </aside>
+            )}
+          </CardContent>
+
+          {!empty && (
+            <>
+              <CardFooter className="flex gap-3 p-6 sm:p-8">
+                {step !== 1 && (
+                  <Button onClick={back} variant="outline" className="flex-1 touch-target">
+                    Back
+                  </Button>
+                )}
+                {step !== 5 && (
+                  <Button
+                    onClick={next}
+                    className="flex-1 touch-target bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:from-amber-600 hover:to-orange-600"
+                  >
+                    Continue
+                  </Button>
+                )}
+              </CardFooter>
+
+              <div className="border-t border-slate-200 bg-slate-50 p-5">
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-600">Subtotal</span>
+                  <span className="font-semibold tabular-nums text-slate-900">{peso(subtotalCents)}</span>
+                </div>
+
+                <div className="mt-2 flex justify-between text-base">
+                  <span className="font-semibold text-slate-900">Total</span>
+                  <span className="font-bold tabular-nums text-slate-900">{peso(totalCents)}</span>
+                </div>
+              </div>
+            </>
+          )}
+        </Card>
+
+        <p className="mt-6 text-center text-xs text-slate-500">
+          Final Destination Services - Handling things. Quietly
+        </p>
       </div>
     </div>
   );

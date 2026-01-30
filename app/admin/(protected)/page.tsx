@@ -10,17 +10,8 @@ function peso(cents: number) {
 }
 
 type DailyRow = {
-  day: string; // date
+  day: string; // date YYYY-MM-DD
   orders_count: number | null;
-  revenue_cents: number | null;
-  cogs_cents: number | null;
-  profit_cents: number | null;
-};
-
-type TopProductRow = {
-  product_id: string;
-  product_name: string;
-  qty_sold: number | null;
   revenue_cents: number | null;
   cogs_cents: number | null;
   profit_cents: number | null;
@@ -36,10 +27,36 @@ function sumRows(rows?: DailyRow[] | null) {
   };
 }
 
+const TZ = "Asia/Manila";
+
+function ymdInTZ(d: Date, timeZone = TZ) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  })
+    .formatToParts(d)
+    .reduce<Record<string, string>>((acc, p) => {
+      if (p.type !== "literal") acc[p.type] = p.value;
+      return acc;
+    }, {});
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function addDaysYMD(ymd: string, days: number) {
+  const [y, m, d] = ymd.split("-").map((x) => parseInt(x, 10));
+  const base = new Date(Date.UTC(y, m - 1, d));
+  base.setUTCDate(base.getUTCDate() + days);
+  const yy = base.getUTCFullYear();
+  const mm = String(base.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(base.getUTCDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
+}
+
 export default async function AdminDashboardPage() {
   const supabase = await supabaseServer();
 
-  // ✅ Correct column name: orders.status (not order_status)
   const OPEN_STATUSES = ["pending", "confirmed", "preparing", "ready", "out_for_delivery"] as const;
 
   const { data: openOrders, error: openErr } = await supabase
@@ -57,8 +74,9 @@ export default async function AdminDashboardPage() {
 
   const openCount = Object.values(statusCounts).reduce((a, b) => a + b, 0);
 
-  // ✅ Pull today realized + pipeline from views
-  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  // ✅ PH-correct "today"
+  const today = ymdInTZ(new Date(), TZ);
+  const start7 = addDaysYMD(today, -6);
 
   const { data: realizedRow, error: realizedErr } = await supabase
     .from("daily_profit_realized")
@@ -85,27 +103,28 @@ export default async function AdminDashboardPage() {
   const pipelineRevenue = Number(pipeline?.revenue_cents ?? 0);
   const pipelineProfit = Number(pipeline?.profit_cents ?? 0);
 
-  // ✅ Weekly (last 7 days): pull 7 most recent rows from each view
+  // ✅ Real 7-day window (calendar days), not "last 7 rows"
   const { data: realized7d, error: realized7dErr } = await supabase
     .from("daily_profit_realized")
     .select("day, orders_count, revenue_cents, cogs_cents, profit_cents")
-    .order("day", { ascending: false })
-    .limit(7);
+    .gte("day", start7)
+    .lte("day", today)
+    .order("day", { ascending: false });
 
   if (realized7dErr) console.error("realized 7d error", realized7dErr);
 
   const { data: pipeline7d, error: pipeline7dErr } = await supabase
     .from("daily_profit_pipeline")
     .select("day, orders_count, revenue_cents, cogs_cents, profit_cents")
-    .order("day", { ascending: false })
-    .limit(7);
+    .gte("day", start7)
+    .lte("day", today)
+    .order("day", { ascending: false });
 
   if (pipeline7dErr) console.error("pipeline 7d error", pipeline7dErr);
 
   const realizedW = sumRows((realized7d ?? []) as any);
   const pipelineW = sumRows((pipeline7d ?? []) as any);
 
-  // ✅ Best sellers (realized, last 7 days) from view
   const { data: bestSellers, error: bestErr } = await supabase
     .from("top_products_7d_realized")
     .select("product_id, product_name, qty_sold, revenue_cents, cogs_cents, profit_cents")
@@ -114,7 +133,6 @@ export default async function AdminDashboardPage() {
 
   if (bestErr) console.error("best sellers error", bestErr);
 
-  // Low stock (unchanged)
   const { data: lowStock, error: lowErr } = await supabase
     .from("products")
     .select("id, name, stock_qty, is_active")
@@ -126,121 +144,116 @@ export default async function AdminDashboardPage() {
 
   return (
     <div>
-      {/* ✅ This makes the whole dashboard auto-refresh on DB changes */}
       <DashboardLiveRefresh />
 
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold">Dashboard</h1>
-          <p className="mt-1 text-sm text-slate-600">Quick pulse of TenPesoRun operations.</p>
+          <h1 className="text-xl font-semibold text-stone-900">Dashboard</h1>
+          <p className="mt-1 text-sm text-stone-600">Quick pulse of FDS operations.</p>
         </div>
 
         <div className="grid grid-cols-2 gap-2">
           <Link
             href="/admin/orders"
-            className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50 text-center"
+            className="rounded-xl border border-stone-200 px-3 py-2 text-sm font-medium text-stone-700 transition hover:border-amber-700 hover:bg-amber-50 text-center"
           >
             View Orders
           </Link>
           <Link
             href="/admin/products"
-            className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50 text-center"
+            className="rounded-xl border border-stone-200 px-3 py-2 text-sm font-medium text-stone-700 transition hover:border-amber-700 hover:bg-amber-50 text-center"
           >
             Manage Products
           </Link>
         </div>
       </div>
 
-      {/* Stat cards */}
       <div className="mt-6 grid gap-3 sm:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 p-4">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-stone-200 bg-gradient-to-br from-stone-50 to-white p-4 shadow-sm">
+          <div className="text-xs font-semibold uppercase tracking-wide text-stone-500">
             Open Orders
           </div>
-          <div className="mt-2 text-2xl font-semibold">{openCount}</div>
-          <div className="mt-1 text-xs text-slate-500">
+          <div className="mt-2 text-2xl font-semibold text-stone-900">{openCount}</div>
+          <div className="mt-1 text-xs text-stone-500">
             Pending → Out for delivery
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 p-4">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white p-4 shadow-sm">
+          <div className="text-xs font-semibold uppercase tracking-wide text-amber-700">
             Today Realized Revenue
           </div>
-          <div className="mt-2 text-2xl font-semibold">{peso(realizedRevenue)}</div>
-          <div className="mt-1 text-xs text-slate-500">
+          <div className="mt-2 text-2xl font-semibold text-amber-900">{peso(realizedRevenue)}</div>
+          <div className="mt-1 text-xs text-amber-700">
             Profit: {peso(realizedProfit)}
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 p-4">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-stone-200 bg-gradient-to-br from-stone-50 to-white p-4 shadow-sm">
+          <div className="text-xs font-semibold uppercase tracking-wide text-stone-500">
             Today Pipeline Revenue
           </div>
-          <div className="mt-2 text-2xl font-semibold">{peso(pipelineRevenue)}</div>
-          <div className="mt-1 text-xs text-slate-500">
+          <div className="mt-2 text-2xl font-semibold text-stone-900">{peso(pipelineRevenue)}</div>
+          <div className="mt-1 text-xs text-stone-500">
             Est. Profit: {peso(pipelineProfit)}
           </div>
         </div>
       </div>
 
-      {/* Weekly summary cards */}
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        <div className="rounded-2xl border border-slate-200 p-4">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white p-4 shadow-sm">
+          <div className="text-xs font-semibold uppercase tracking-wide text-amber-700">
             Realized (Last 7 days)
           </div>
-          <div className="mt-2 text-xl font-semibold">{peso(realizedW.revenue)}</div>
-          <div className="mt-1 text-xs text-slate-500">
+          <div className="mt-2 text-xl font-semibold text-amber-900">{peso(realizedW.revenue)}</div>
+          <div className="mt-1 text-xs text-amber-700">
             Profit: {peso(realizedW.profit)} · Orders: {realizedW.orders}
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 p-4">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="rounded-2xl border border-stone-200 bg-gradient-to-br from-stone-50 to-white p-4 shadow-sm">
+          <div className="text-xs font-semibold uppercase tracking-wide text-stone-500">
             Pipeline (Last 7 days)
           </div>
-          <div className="mt-2 text-xl font-semibold">{peso(pipelineW.revenue)}</div>
-          <div className="mt-1 text-xs text-slate-500">
+          <div className="mt-2 text-xl font-semibold text-stone-900">{peso(pipelineW.revenue)}</div>
+          <div className="mt-1 text-xs text-stone-500">
             Est. Profit: {peso(pipelineW.profit)} · Orders: {pipelineW.orders}
           </div>
         </div>
       </div>
 
-      {/* Status breakdown */}
-      <div className="mt-6 rounded-2xl border border-slate-200 p-4">
+      <div className="mt-6 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
         <div className="flex items-center justify-between">
-          <div className="font-semibold">Open order statuses</div>
-          <Link href="/admin/orders" className="text-sm text-slate-600 hover:underline">
+          <div className="font-semibold text-stone-900">Open order statuses</div>
+          <Link href="/admin/orders" className="text-sm text-amber-700 transition hover:text-amber-800 hover:underline">
             Open Orders
           </Link>
         </div>
 
         <div className="mt-3 grid gap-2 sm:grid-cols-5">
           {OPEN_STATUSES.map((k) => (
-            <div key={k} className="rounded-xl bg-slate-50 p-3">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <div key={k} className="rounded-xl border border-stone-200 bg-stone-50 p-3">
+              <div className="text-xs font-semibold uppercase tracking-wide text-stone-500">
                 {k.replaceAll("_", " ")}
               </div>
-              <div className="mt-1 text-xl font-semibold">{statusCounts[k] ?? 0}</div>
+              <div className="mt-1 text-xl font-semibold text-stone-900">{statusCounts[k] ?? 0}</div>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Best sellers */}
-      <div className="mt-6 rounded-2xl border border-slate-200 p-4">
+      <div className="mt-6 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
         <div className="flex items-center justify-between">
-          <div className="font-semibold">Best sellers (last 7 days, realized)</div>
-          <Link href="/admin/products" className="text-sm text-slate-600 hover:underline">
+          <div className="font-semibold text-stone-900">Best sellers (last 7 days, realized)</div>
+          <Link href="/admin/products" className="text-sm text-amber-700 transition hover:text-amber-800 hover:underline">
             Products
           </Link>
         </div>
 
         <div className="mt-3 overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="text-left text-slate-500">
-              <tr className="border-b">
+            <thead className="text-left text-stone-500">
+              <tr className="border-b border-stone-200">
                 <th className="py-2 pr-2">Product</th>
                 <th className="py-2 pr-2">Qty</th>
                 <th className="py-2 pr-2">Revenue</th>
@@ -249,16 +262,16 @@ export default async function AdminDashboardPage() {
             </thead>
             <tbody>
               {(bestSellers ?? []).map((r: any) => (
-                <tr key={r.product_id} className="border-b last:border-b-0">
-                  <td className="py-2 pr-2 font-medium">{r.product_name}</td>
-                  <td className="py-2 pr-2">{Number(r.qty_sold ?? 0)}</td>
-                  <td className="py-2 pr-2">{peso(Number(r.revenue_cents ?? 0))}</td>
-                  <td className="py-2 pr-2">{peso(Number(r.profit_cents ?? 0))}</td>
+                <tr key={r.product_id} className="border-b border-stone-200 last:border-b-0">
+                  <td className="py-2 pr-2 font-medium text-stone-900">{r.product_name}</td>
+                  <td className="py-2 pr-2 text-stone-700">{Number(r.qty_sold ?? 0)}</td>
+                  <td className="py-2 pr-2 text-stone-700">{peso(Number(r.revenue_cents ?? 0))}</td>
+                  <td className="py-2 pr-2 font-semibold text-amber-800">{peso(Number(r.profit_cents ?? 0))}</td>
                 </tr>
               ))}
               {!bestSellers?.length && (
                 <tr>
-                  <td className="py-3 text-slate-600" colSpan={4}>
+                  <td className="py-3 text-stone-600" colSpan={4}>
                     No paid sales yet in the last 7 days.
                   </td>
                 </tr>
@@ -268,19 +281,18 @@ export default async function AdminDashboardPage() {
         </div>
       </div>
 
-      {/* Low stock */}
-      <div className="mt-6 rounded-2xl border border-slate-200 p-4">
+      <div className="mt-6 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
         <div className="flex items-center justify-between">
-          <div className="font-semibold">Low stock</div>
-          <Link href="/admin/products" className="text-sm text-slate-600 hover:underline">
+          <div className="font-semibold text-stone-900">Low stock</div>
+          <Link href="/admin/products" className="text-sm text-amber-700 transition hover:text-amber-800 hover:underline">
             Go to Products
           </Link>
         </div>
 
         <div className="mt-3 overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="text-left text-slate-500">
-              <tr className="border-b">
+            <thead className="text-left text-stone-500">
+              <tr className="border-b border-stone-200">
                 <th className="py-2 pr-2">Product</th>
                 <th className="py-2 pr-2">Stock</th>
                 <th className="py-2 pr-2">Active</th>
@@ -288,15 +300,15 @@ export default async function AdminDashboardPage() {
             </thead>
             <tbody>
               {(lowStock ?? []).map((p: any) => (
-                <tr key={p.id} className="border-b last:border-b-0">
-                  <td className="py-2 pr-2 font-medium">{p.name}</td>
-                  <td className="py-2 pr-2">{p.stock_qty}</td>
-                  <td className="py-2 pr-2">{p.is_active ? "Yes" : "No"}</td>
+                <tr key={p.id} className="border-b border-stone-200 last:border-b-0">
+                  <td className="py-2 pr-2 font-medium text-stone-900">{p.name}</td>
+                  <td className="py-2 pr-2 text-stone-700">{p.stock_qty}</td>
+                  <td className="py-2 pr-2 text-stone-700">{p.is_active ? "Yes" : "No"}</td>
                 </tr>
               ))}
               {!lowStock?.length && (
                 <tr>
-                  <td className="py-3 text-slate-600" colSpan={3}>
+                  <td className="py-3 text-stone-600" colSpan={3}>
                     No products found (or stock data not available yet).
                   </td>
                 </tr>
@@ -306,19 +318,18 @@ export default async function AdminDashboardPage() {
         </div>
       </div>
 
-      {/* Quick links */}
       <div className="mt-6 grid gap-3 sm:grid-cols-3">
-        <Link href="/admin/products" className="rounded-2xl border border-slate-200 p-4 hover:bg-slate-50">
-          <div className="font-semibold">Products</div>
-          <div className="text-sm text-slate-600">Inventory and pricing</div>
+        <Link href="/admin/products" className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm transition hover:border-amber-700 hover:bg-amber-50">
+          <div className="font-semibold text-stone-900">Products</div>
+          <div className="text-sm text-stone-600">Inventory and pricing</div>
         </Link>
-        <Link href="/admin/orders" className="rounded-2xl border border-slate-200 p-4 hover:bg-slate-50">
-          <div className="font-semibold">Orders</div>
-          <div className="text-sm text-slate-600">Workflow and payments</div>
+        <Link href="/admin/orders" className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm transition hover:border-amber-700 hover:bg-amber-50">
+          <div className="font-semibold text-stone-900">Orders</div>
+          <div className="text-sm text-stone-600">Workflow and payments</div>
         </Link>
-        <Link href="/admin/settings" className="rounded-2xl border border-slate-200 p-4 hover:bg-slate-50">
-          <div className="font-semibold">Settings</div>
-          <div className="text-sm text-slate-600">Landing + wizard config</div>
+        <Link href="/admin/settings" className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm transition hover:border-amber-700 hover:bg-amber-50">
+          <div className="font-semibold text-stone-900">Settings</div>
+          <div className="text-sm text-stone-600">Landing + wizard config</div>
         </Link>
       </div>
     </div>

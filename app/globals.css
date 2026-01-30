@@ -2,15 +2,57 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  color-scheme: light;
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 20 14.3% 4.1%;
+    --card: 0 0% 100%;
+    --card-foreground: 20 14.3% 4.1%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 20 14.3% 4.1%;
+    --primary: 21 95% 55%; /* Amber-700 */
+    --primary-foreground: 60 9.1% 97.8%;
+    --secondary: 60 4.8% 95.9%;
+    --secondary-foreground: 24 9.8% 10%;
+    --muted: 60 4.8% 95.9%;
+    --muted-foreground: 25 5.3% 44.7%;
+    --accent: 60 4.8% 95.9%;
+    --accent-foreground: 24 9.8% 10%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 60 9.1% 97.8%;
+    --border: 20 5.9% 90%;
+    --input: 20 5.9% 90%;
+    --ring: 21 95% 55%; /* Amber-700 */
+    --radius: 0.5rem;
+  }
 }
 
-body {
-  @apply bg-slate-50 text-slate-900;
-}
+@layer utilities {
+  /* FDS Warm Taupe/Espresso Gradients */
+  .fds-gradient-warm {
+    @apply bg-gradient-to-r from-stone-600 to-amber-900;
+  }
+  
+  .fds-gradient-amber {
+    @apply bg-gradient-to-r from-amber-700 to-amber-900;
+  }
 
-/* Simple container helper */
-.container-app {
-  @apply mx-auto max-w-6xl px-4;
+  .fds-gradient-subtle {
+    @apply bg-gradient-to-b from-stone-50/30 to-white;
+  }
+
+  /* Touch-friendly targets for mobile */
+  .touch-target {
+    @apply min-h-[44px] min-w-[44px];
+  }
+
+  /* Hide scrollbar but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
 }

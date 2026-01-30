@@ -1,8 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { supabaseBrowser } from "@/lib/supabase/browser";
+import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { ArrowLeft, CheckCircle2, ShoppingBag, CreditCard, MapPin } from "lucide-react";
 
 type CartItem = {
   id: string;
@@ -20,7 +25,7 @@ type ProductForSnapshot = {
   cost_cents: number;
 };
 
-const CART_KEY = "tenpesorun_cart_v1";
+const CART_KEY = "fds_cart_v1";
 
 function peso(cents: number) {
   return new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format((cents ?? 0) / 100);
@@ -30,7 +35,7 @@ function genOrderCode() {
   const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
   let s = "";
   for (let i = 0; i < 6; i++) s += chars[Math.floor(Math.random() * chars.length)];
-  return `TPR-${s}`;
+  return `FDS-${s}`;
 }
 
 function genUUID() {
@@ -41,7 +46,7 @@ function genUUID() {
 function Field({ label, children }: any) {
   return (
     <div className="grid gap-2">
-      <div className="text-sm font-semibold text-slate-900">{label}</div>
+      <div className="text-sm font-semibold text-stone-900">{label}</div>
       {children}
     </div>
   );
@@ -61,7 +66,10 @@ function pickPendingLabel(labels: string[]) {
 export default function CheckoutPage() {
   const [isPending, startTransition] = useTransition();
 
-  const [cart, setCart] = useState<CartItem[]>([]);
+  
+  const placingRef = useRef(false);
+  const [isPlacing, setIsPlacing] = useState(false);
+const [cart, setCart] = useState<CartItem[]>([]);
   const cartCount = useMemo(() => cart.reduce((a, i) => a + i.qty, 0), [cart]);
   const subtotalCents = useMemo(() => cart.reduce((a, i) => a + i.qty * i.price_cents, 0), [cart]);
 
@@ -80,19 +88,11 @@ export default function CheckoutPage() {
 
   const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1);
 
-  // ✅ Step 1 only: name
   const [customerName, setCustomerName] = useState("");
-
-  // ✅ Contact still exists because DB requires it (not nullable). We auto-fill.
   const contact = "N/A";
-
-  // ✅ Fulfillment locked to pickup (Delivery disabled)
   const fulfillment: "pickup" | "delivery" = "pickup";
-
-  // ✅ Pickup point is selectable (same as before)
   const [pickupPoint, setPickupPoint] = useState<"boys" | "girls" | "">("");
 
-  // Delivery fields remain but are never used (step 3 never reached)
   const [locationType, setLocationType] = useState<"house" | "room" | "other" | "">("");
   const [deliveryLocation, setDeliveryLocation] = useState("");
   const [notes, setNotes] = useState("");
@@ -102,7 +102,6 @@ export default function CheckoutPage() {
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // ✅ Delivery locked OFF, so fee is always 0 and total is stable
   const feeCents = 0;
   const totalCents = subtotalCents + feeCents;
 
@@ -169,10 +168,9 @@ export default function CheckoutPage() {
 
     if (step === 2) {
       if (!pickupPoint) return setErrorMsg("Please choose a pickup point (Boys or Girls dorm).");
-      return setStep(4); // skip delivery
+      return setStep(4);
     }
 
-    // Step 3 will never be reached, but keep logic harmless
     if (step === 3) {
       return setStep(4);
     }
@@ -195,7 +193,11 @@ export default function CheckoutPage() {
   async function placeOrder() {
     setErrorMsg(null);
 
-    if (empty) return setErrorMsg("Your cart is empty.");
+    
+    if (placingRef.current) return; // ✅ ignore double-clicks
+    placingRef.current = true;
+    setIsPlacing(true);
+if (empty) return setErrorMsg("Your cart is empty.");
     if (!paymentStatusDefault) return setErrorMsg("Loading settings… please try again.");
     if (!customerName.trim()) return setErrorMsg("Please enter your name.");
     if (!pickupPoint) return setErrorMsg("Please choose a pickup point (Boys or Girls dorm).");
@@ -208,90 +210,56 @@ export default function CheckoutPage() {
       try {
         const supabase = supabaseBrowser();
 
-        const ids = cart.map((c) => c.id);
-        const { data: prods, error: pErr } = await supabase
-          .from("products")
-          .select("id, name, category, cost_cents")
-          .in("id", ids);
-
-        if (pErr) throw new Error(pErr.message);
-
-        const byId = new Map<string, ProductForSnapshot>();
-        for (const p of (prods ?? []) as any[]) {
-          byId.set(p.id, { id: p.id, name: p.name, category: p.category ?? null, cost_cents: p.cost_cents ?? 0 });
-        }
-
         const order_id = genUUID();
-        const order_code = genOrderCode();
+const order_code = genOrderCode();
 
-        // ✅ Still records pickup label inside notes like before
-        const pickupLabel =
-          pickupPoint === "boys"
-            ? "Pickup: Boys dorm (Room 411)"
-            : pickupPoint === "girls"
-              ? "Pickup: Girls dorm (Room 206)"
-              : "";
+const pickupLabel =
+  pickupPoint === "boys"
+    ? "Pickup: Boys dorm (Room 411)"
+    : pickupPoint === "girls"
+      ? "Pickup: Girls dorm (Room 206)"
+      : "";
 
-        const mergedNotes = [pickupLabel, notes.trim()].filter(Boolean).join(" | ") || null;
+const mergedNotes = [pickupLabel, notes.trim()].filter(Boolean).join(" | ") || "";
 
-        const { error: oErr } = await supabase.from("orders").insert({
-          id: order_id,
-          order_code,
-          customer_name: customerName.trim(),
-          contact, // ✅ required by schema
-          notes: mergedNotes,
-          fulfillment: fulfillment,
-          pickup_location: pickupPoint === "boys" ? "boys_411" : pickupPoint === "girls" ? "girls_206" : null,
-          delivery_fee_cents: 0,
-          delivery_location: null,
-          payment_method: paymentMethod,
-          subtotal_cents: subtotalCents,
-          total_cents: totalCents,
-          status: "pending",
-        });
+const items = cart.map((c) => ({
+  product_id: c.id,
+  qty: c.qty,
+}));
 
-        if (oErr) throw new Error(oErr.message);
+const { data, error } = await supabase.rpc("place_order_atomic", {
+  p_order_id: order_id,
+  p_order_code: order_code,
+  p_customer_name: customerName.trim(),
+  p_contact: contact,
+  p_notes: mergedNotes,
+  p_fulfillment: fulfillment,
+  p_pickup_location:
+    pickupPoint === "boys" ? "boys_411" : pickupPoint === "girls" ? "girls_206" : "",
+  p_delivery_fee_cents: feeCents,
+  p_delivery_location: "",
+  p_payment_method: paymentMethod,
+  p_payment_status: paymentStatusDefault,
+  p_payment_ref: paymentMethod === "gcash" ? gcashRef.trim() : "",
+  p_items: items,
+});
 
-        const itemsPayload = cart.map((c) => {
-          const snap = byId.get(c.id);
-          return {
-            order_id,
-            product_id: c.id,
-            name_snapshot: c.name,
-            category_snapshot: snap?.category ?? c.category ?? null,
-            unit_price_cents: c.price_cents,
-            unit_cost_cents: snap?.cost_cents ?? 0,
-            qty: c.qty,
-            line_total_cents: c.qty * c.price_cents,
-          };
-        });
+if (error) throw new Error(error.message);
 
-        const { error: oiErr } = await supabase.from("order_items").insert(itemsPayload);
-        if (oiErr) throw new Error(oiErr.message);
+try {
+  localStorage.removeItem(CART_KEY);
+} catch {}
 
-        const paymentPayload: any = {
-          order_id,
-          method: paymentMethod,
-          amount_cents: totalCents,
-          reference_number: paymentMethod === "gcash" ? gcashRef.trim() : null,
-          status: paymentStatusDefault,
-        };
-
-        const { error: payErr } = await supabase.from("payments").insert(paymentPayload);
-        if (payErr) throw new Error(payErr.message);
-
-        try {
-          localStorage.removeItem(CART_KEY);
-        } catch {}
-
-        window.location.href = `/order/success/${order_code}`;
+window.location.href = `/order/success/${data?.order_code ?? order_code}`;
       } catch (e: any) {
         setErrorMsg(e?.message ?? "Failed to place order.");
-      }
+      
+        placingRef.current = false;
+        setIsPlacing(false);
+}
     });
   }
 
-  // UI helpers
   const stepLabels = ["Customer", "Fulfillment", "Location", "Payment", "Review"];
   const progressPct = ((step - 1) / 4) * 100;
 
@@ -299,227 +267,234 @@ export default function CheckoutPage() {
     pickupPoint === "boys" ? "Boys dorm (Room 411)" : pickupPoint === "girls" ? "Girls dorm (Room 206)" : "—";
 
   return (
-    <div className="min-h-screen">
-      <div className="sticky top-0 z-30 border-b border-slate-200/70 bg-white/75 backdrop-blur">
-        <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 rounded-xl border border-transparent px-3 py-2 text-sm font-semibold text-slate-900 hover:border-slate-200 hover:bg-white hover:shadow-sm transition"
-          >
-            ← Back to store
-          </Link>
-          <div className="hidden sm:block rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600">
+    <div className="min-h-screen bg-gradient-to-b from-stone-50/30 to-white">
+      {/* Header */}
+      <header className="sticky top-0 z-30 border-b border-stone-200/70 bg-white/90 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3 sm:px-6">
+          <Button variant="outline" asChild className="gap-2 border-stone-300 text-stone-700">
+            <Link href="/">
+              <ArrowLeft className="h-4 w-4" />
+              Back to store
+            </Link>
+          </Button>
+          <Badge variant="secondary" className="hidden sm:inline-flex">
             {cartCount ? `${cartCount} item(s)` : "Empty"}
-          </div>
+          </Badge>
         </div>
-      </div>
+      </header>
 
-      <div className="mx-auto max-w-3xl px-4 py-6">
-        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-          <div className="p-6 sm:p-9">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-2xl font-semibold tracking-tight text-slate-900">Checkout</div>
-                <div className="mt-1 text-sm text-slate-600">Fast campus order, no account needed.</div>
+      <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-8">
+        <Card className="overflow-hidden shadow-lg">
+          <CardHeader className="space-y-4 bg-gradient-to-br from-stone-50 to-white p-6 sm:p-8">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-2">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-stone-600 to-amber-900 text-white shadow-md">
+                    <ShoppingBag className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h1 className="text-2xl font-bold tracking-tight text-stone-900">Checkout</h1>
+                    <p className="text-sm text-stone-600">Fast campus order, no account needed</p>
+                  </div>
+                </div>
               </div>
 
-              <div className="hidden sm:block text-right">
-                <div className="text-xs text-slate-500">Step</div>
-                <div className="text-sm font-semibold text-slate-900">
-                  {step} / 5
-                </div>
+              <div className="hidden text-right sm:block">
+                <div className="text-xs text-stone-500">Step</div>
+                <div className="text-sm font-semibold text-stone-900">{step} / 5</div>
               </div>
             </div>
 
             {/* Progress */}
             {!empty && (
-              <div className="mt-5">
-                <div className="flex items-center justify-between text-xs text-slate-500">
-                  <span className="font-medium text-slate-700">{stepLabels[step - 1]}</span>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs text-stone-500">
+                  <span className="font-medium text-stone-700">{stepLabels[step - 1]}</span>
                   <span>{Math.round(progressPct)}%</span>
                 </div>
-                <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-100">
-                  <div className="h-full rounded-full bg-slate-900 transition-all" style={{ width: `${progressPct}%` }} />
+                <div className="h-2 w-full overflow-hidden rounded-full bg-stone-100">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-amber-700 to-amber-900 transition-all duration-300"
+                    style={{ width: `${progressPct}%` }}
+                  />
                 </div>
               </div>
             )}
+          </CardHeader>
 
+          <CardContent className="p-6 sm:p-8">
             {empty ? (
-              <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-5 text-sm text-slate-700">
-                Your cart is empty.{" "}
-                <Link className="font-semibold underline" href="/">
-                  Go back to the store
-                </Link>
-                .
+              <div className="rounded-2xl border-2 border-dashed border-stone-300 bg-stone-50 p-8 text-center">
+                <ShoppingBag className="mx-auto h-12 w-12 text-stone-400" />
+                <h3 className="mt-4 font-semibold text-stone-900">Your cart is empty</h3>
+                <p className="mt-2 text-sm text-stone-500">
+                  <Link className="font-semibold text-amber-700 hover:text-amber-800" href="/">
+                    Go back to the store
+                  </Link>{" "}
+                  to add items.
+                </p>
               </div>
             ) : (
-              <>
+              <div className="space-y-6">
                 {errorMsg && (
-                  <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  <div className="rounded-xl border-2 border-red-200 bg-red-50 p-4 text-sm text-red-700">
                     {errorMsg}
                   </div>
                 )}
 
-                {/* STEP 1: NAME ONLY */}
+                {/* STEP 1: NAME */}
                 {step === 1 && (
-                  <div className="mt-6 grid gap-4">
+                  <div className="space-y-4">
                     <Field label="Your name">
                       <input
                         value={customerName}
                         onChange={(e) => setCustomerName(e.target.value)}
                         placeholder="e.g. Juan D."
-                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm outline-none focus:border-slate-400"
+                        className="w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm shadow-sm outline-none focus:border-amber-700 focus:ring-2 focus:ring-amber-700/20"
                       />
                     </Field>
-
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-                      Contact + delivery options will be enabled later.
-                    </div>
                   </div>
                 )}
 
-                {/* STEP 2: PICKUP LOCATION (SELECTABLE) + DELIVERY COMING SOON */}
+                {/* STEP 2: PICKUP LOCATION */}
                 {step === 2 && (
-                  <div className="mt-6 grid gap-4">
-                    <div className="text-sm font-semibold text-slate-900">Pickup location</div>
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-stone-900">
+                      <MapPin className="h-4 w-4" />
+                      Pickup location
+                    </div>
 
-                    <div className="grid gap-2">
+                    <div className="grid gap-3">
                       <button
                         disabled={!enablePickup}
                         onClick={() => setPickupPoint("boys")}
                         className={[
-                          "rounded-2xl border p-4 text-left shadow-sm transition",
+                          "touch-target rounded-xl border-2 p-4 text-left shadow-sm transition-all",
                           pickupPoint === "boys"
-                            ? "border-slate-900 bg-slate-900 text-white"
-                            : "border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300",
-                          !enablePickup ? "opacity-50 cursor-not-allowed" : "",
+                            ? "border-amber-700 bg-amber-50 ring-2 ring-amber-700/20"
+                            : "border-stone-200 bg-white hover:border-stone-300 hover:bg-stone-50",
+                          !enablePickup ? "cursor-not-allowed opacity-50" : "",
                         ].join(" ")}
                       >
-                        <div className="font-semibold">Boys Dorm</div>
-                        <div className={pickupPoint === "boys" ? "text-white/80 text-sm" : "text-sm text-slate-600"}>
-                          Room 411
-                        </div>
+                        <div className="font-semibold text-stone-900">Boys Dorm</div>
+                        <div className="text-sm text-stone-600">Room 411</div>
                       </button>
 
                       <button
                         disabled={!enablePickup}
                         onClick={() => setPickupPoint("girls")}
                         className={[
-                          "rounded-2xl border p-4 text-left shadow-sm transition",
+                          "touch-target rounded-xl border-2 p-4 text-left shadow-sm transition-all",
                           pickupPoint === "girls"
-                            ? "border-slate-900 bg-slate-900 text-white"
-                            : "border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300",
-                          !enablePickup ? "opacity-50 cursor-not-allowed" : "",
+                            ? "border-amber-700 bg-amber-50 ring-2 ring-amber-700/20"
+                            : "border-stone-200 bg-white hover:border-stone-300 hover:bg-stone-50",
+                          !enablePickup ? "cursor-not-allowed opacity-50" : "",
                         ].join(" ")}
                       >
-                        <div className="font-semibold">Girls Dorm</div>
-                        <div className={pickupPoint === "girls" ? "text-white/80 text-sm" : "text-sm text-slate-600"}>
-                          Room 206
-                        </div>
+                        <div className="font-semibold text-stone-900">Girls Dorm</div>
+                        <div className="text-sm text-stone-600">Room 206</div>
                       </button>
                     </div>
 
-                    {/* Delivery (disabled + Coming soon) */}
-                    <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 opacity-90">
+                    <div className="rounded-xl border border-stone-200 bg-stone-50 p-4 opacity-75">
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <div className="font-semibold text-slate-900">Delivery</div>
-                          <div className="text-sm text-slate-600">Campus delivery to your location</div>
+                          <div className="font-semibold text-stone-900">Delivery</div>
+                          <div className="text-sm text-stone-600">Campus delivery to your location</div>
                         </div>
-                        <div className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
+                        <Badge variant="secondary" className="bg-amber-100 text-amber-800">
                           Coming soon
-                        </div>
-                      </div>
-                      <div className="mt-2 text-xs text-slate-500">
-                        Delivery fee: ₱{(deliveryFeeCents / 100).toFixed(0)} (not active yet)
+                        </Badge>
                       </div>
                     </div>
                   </div>
                 )}
 
-                {/* STEP 3: NOT USED (kept for safety, but user never reaches it) */}
+                {/* STEP 3: NOT USED */}
                 {step === 3 && (
-                  <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                  <div className="rounded-xl border border-stone-200 bg-stone-50 p-4 text-sm text-stone-600">
                     Delivery location is currently disabled.
                   </div>
                 )}
 
                 {/* STEP 4: PAYMENT */}
                 {step === 4 && (
-                  <div className="mt-6 grid gap-4">
-                    <div className="text-sm font-semibold text-slate-900">Payment method</div>
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-stone-900">
+                      <CreditCard className="h-4 w-4" />
+                      Payment method
+                    </div>
 
-                    <div className="grid gap-2">
+                    <div className="grid gap-3">
                       <button
                         disabled={!enableGCash}
                         onClick={() => setPaymentMethod("gcash")}
                         className={[
-                          "rounded-2xl border p-4 text-left shadow-sm transition",
+                          "touch-target rounded-xl border-2 p-4 text-left shadow-sm transition-all",
                           paymentMethod === "gcash"
-                            ? "border-slate-900 bg-slate-900 text-white"
-                            : "border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300",
-                          !enableGCash ? "opacity-50 cursor-not-allowed" : "",
+                            ? "border-amber-700 bg-amber-50 ring-2 ring-amber-700/20"
+                            : "border-stone-200 bg-white hover:border-stone-300 hover:bg-stone-50",
+                          !enableGCash ? "cursor-not-allowed opacity-50" : "",
                         ].join(" ")}
                       >
-                        <div className="font-semibold">GCash</div>
-                        <div className={paymentMethod === "gcash" ? "text-white/80 text-sm" : "text-sm text-slate-600"}>
-                          Pay via GCash (enter ref)
-                        </div>
+                        <div className="font-semibold text-stone-900">GCash</div>
+                        <div className="text-sm text-stone-600">Pay via GCash (enter ref)</div>
                       </button>
 
                       <button
                         disabled={!enableCOD}
                         onClick={() => setPaymentMethod("cod")}
                         className={[
-                          "rounded-2xl border p-4 text-left shadow-sm transition",
+                          "touch-target rounded-xl border-2 p-4 text-left shadow-sm transition-all",
                           paymentMethod === "cod"
-                            ? "border-slate-900 bg-slate-900 text-white"
-                            : "border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300",
-                          !enableCOD ? "opacity-50 cursor-not-allowed" : "",
+                            ? "border-amber-700 bg-amber-50 ring-2 ring-amber-700/20"
+                            : "border-stone-200 bg-white hover:border-stone-300 hover:bg-stone-50",
+                          !enableCOD ? "cursor-not-allowed opacity-50" : "",
                         ].join(" ")}
                       >
-                        <div className="font-semibold">Cash on Pickup</div>
-                        <div className={paymentMethod === "cod" ? "text-white/80 text-sm" : "text-sm text-slate-600"}>
-                          Pay when you receive it
-                        </div>
+                        <div className="font-semibold text-stone-900">Cash on Pickup</div>
+                        <div className="text-sm text-stone-600">Pay when you receive it</div>
                       </button>
                     </div>
 
                     {paymentMethod === "gcash" && (
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                        <div className="text-sm font-semibold">GCash payment details</div>
+                      <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                        <div className="text-sm font-semibold text-amber-900">GCash payment details</div>
 
-                        <div className="mt-3 grid gap-2 text-sm">
+                        <div className="mt-3 space-y-2 text-sm">
                           <div className="flex justify-between gap-3">
-                            <span className="text-slate-600">Name</span>
-                            <span className="font-semibold">{gcashName || "—"}</span>
+                            <span className="text-amber-700">Name</span>
+                            <span className="font-semibold text-amber-900">{gcashName || "—"}</span>
                           </div>
                           <div className="flex justify-between gap-3">
-                            <span className="text-slate-600">Number</span>
-                            <span className="font-semibold">{gcashNumber || "—"}</span>
+                            <span className="text-amber-700">Number</span>
+                            <span className="font-semibold text-amber-900">{gcashNumber || "—"}</span>
                           </div>
                           <div className="flex justify-between gap-3">
-                            <span className="text-slate-600">Amount</span>
-                            <span className="font-semibold">{peso(totalCents)}</span>
+                            <span className="text-amber-700">Amount</span>
+                            <span className="font-semibold text-amber-900">{peso(totalCents)}</span>
                           </div>
                         </div>
 
                         {gcashInstructions ? (
-                          <p className="mt-3 text-xs text-slate-600">{gcashInstructions}</p>
+                          <p className="mt-3 text-xs text-amber-700">{gcashInstructions}</p>
                         ) : (
-                          <p className="mt-3 text-xs text-slate-600">Send exact amount, then enter your reference number.</p>
+                          <p className="mt-3 text-xs text-amber-700">
+                            Send exact amount, then enter your reference number.
+                          </p>
                         )}
 
                         <div className="mt-4">
-                          <label className="text-xs font-semibold text-slate-700">GCash reference number</label>
+                          <label className="text-xs font-semibold text-amber-900">GCash reference number</label>
                           <input
                             value={gcashRef}
                             onChange={(e) => setGcashRef(e.target.value)}
                             placeholder="Enter reference number"
-                            className="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm outline-none focus:border-slate-400"
+                            className="mt-1 w-full rounded-xl border border-amber-300 bg-white px-4 py-3 text-sm shadow-sm outline-none focus:border-amber-700 focus:ring-2 focus:ring-amber-700/20"
                           />
-                          <div className="mt-1 text-xs text-slate-500">
-                            If you’ll pay after placing the order, enter <span className="font-semibold">TO-FOLLOW</span>.
+                          <div className="mt-1 text-xs text-amber-700">
+                            If you'll pay after placing the order, enter{" "}
+                            <span className="font-semibold">TO-FOLLOW</span>.
                           </div>
                         </div>
                       </div>
@@ -529,97 +504,114 @@ export default function CheckoutPage() {
 
                 {/* STEP 5: REVIEW */}
                 {step === 5 && (
-                  <div className="mt-6 grid gap-4">
-                    <div className="text-sm font-semibold text-slate-900">Review</div>
+                  <div className="space-y-4">
+                    <div className="text-sm font-semibold text-stone-900">Review your order</div>
 
-                    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                      <div className="text-sm font-semibold">{customerName}</div>
-                      <div className="mt-1 text-sm text-slate-600">
+                    <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
+                      <div className="text-sm font-semibold text-stone-900">{customerName}</div>
+                      <div className="mt-1 text-sm text-stone-600">
                         Pickup • <span className="font-semibold">{fulfillmentText}</span>
                       </div>
-                      <div className="mt-2 text-sm text-slate-600">
+                      <div className="mt-2 text-sm text-stone-600">
                         Payment: <span className="font-semibold">{paymentMethod.toUpperCase()}</span>
                         {paymentMethod === "gcash" && gcashRef ? ` • Ref: ${gcashRef}` : ""}
                       </div>
                     </div>
 
-                    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                      <div className="text-sm font-semibold">Items</div>
+                    <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
+                      <div className="text-sm font-semibold text-stone-900">Items</div>
                       <div className="mt-3 space-y-2">
                         {cart.map((i) => (
                           <div key={i.id} className="flex justify-between text-sm">
-                            <div className="text-slate-700">
+                            <div className="text-stone-700">
                               {i.qty}× {i.name}
                             </div>
-                            <div className="font-semibold tabular-nums">{peso(i.qty * i.price_cents)}</div>
+                            <div className="font-semibold tabular-nums text-stone-900">
+                              {peso(i.qty * i.price_cents)}
+                            </div>
                           </div>
                         ))}
                       </div>
 
-                      <div className="mt-4 border-t border-slate-200 pt-3 text-sm">
+                      <Separator className="my-3" />
+
+                      <div className="space-y-2 text-sm">
                         <div className="flex justify-between">
-                          <span className="text-slate-600">Subtotal</span>
-                          <span className="font-semibold tabular-nums">{peso(subtotalCents)}</span>
+                          <span className="text-stone-600">Subtotal</span>
+                          <span className="font-semibold tabular-nums text-stone-900">{peso(subtotalCents)}</span>
                         </div>
 
-                        <div className="mt-2 flex justify-between text-base">
-                          <span className="font-semibold">Total</span>
-                          <span className="font-semibold tabular-nums">{peso(totalCents)}</span>
+                        <div className="flex justify-between text-base">
+                          <span className="font-semibold text-stone-900">Total</span>
+                          <span className="font-bold tabular-nums text-stone-900">{peso(totalCents)}</span>
                         </div>
                       </div>
                     </div>
 
-                    <button
-                      disabled={isPending}
+                    <Button
+                      disabled={isPending || isPlacing}
                       onClick={placeOrder}
-                      className="rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 disabled:opacity-50"
+                      className="w-full touch-target bg-gradient-to-r from-amber-700 to-amber-900 text-white hover:from-amber-800 hover:to-amber-950"
+                      size="lg"
                     >
-                      {isPending ? "Placing order…" : "Place order"}
-                    </button>
+                      {isPending || isPlacing ? (
+                        "Placing order…"
+                      ) : (
+                        <>
+                          <CheckCircle2 className="mr-2 h-5 w-5" />
+                          Place order
+                        </>
+                      )}
+                    </Button>
 
-                    <div className="text-xs text-slate-500">
-                      After placing, you’ll be redirected to your order success page.
-                    </div>
+                    <p className="text-center text-xs text-stone-500">
+                      After placing, you'll be redirected to your order success page.
+                    </p>
                   </div>
                 )}
-
-                <div className="mt-6 flex gap-2">
-                  {step !== 1 && (
-                    <button
-                      onClick={back}
-                      className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold shadow-sm hover:bg-slate-50"
-                    >
-                      Back
-                    </button>
-                  )}
-                  {step !== 5 && (
-                    <button
-                      onClick={next}
-                      className="flex-1 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800"
-                    >
-                      Continue
-                    </button>
-                  )}
-                </div>
-              </>
+              </div>
             )}
-          </div>
+          </CardContent>
 
           {!empty && (
-            <div className="border-t border-slate-200 bg-slate-50/60 p-5">
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-600">Subtotal</span>
-                <span className="font-semibold tabular-nums">{peso(subtotalCents)}</span>
-              </div>
+            <>
+              <CardFooter className="flex gap-3 p-6 sm:p-8">
+                {step !== 1 && (
+                  <Button onClick={back} variant="outline" className="flex-1 touch-target border-stone-300">
+                    Back
+                  </Button>
+                )}
+                {step !== 5 && (
+                  <Button
+                    onClick={next}
+                    className="flex-1 touch-target bg-gradient-to-r from-amber-700 to-amber-900 text-white hover:from-amber-800 hover:to-amber-950"
+                  >
+                    Continue
+                  </Button>
+                )}
+              </CardFooter>
 
-              <div className="mt-2 flex justify-between text-base">
-                <span className="font-semibold">Total</span>
-                <span className="font-semibold tabular-nums">{peso(totalCents)}</span>
+              <div className="border-t border-stone-200 bg-stone-50 p-5">
+                <div className="flex justify-between text-sm">
+                  <span className="text-stone-600">Subtotal</span>
+                  <span className="font-semibold tabular-nums text-stone-900">{peso(subtotalCents)}</span>
+                </div>
+
+                <div className="mt-2 flex justify-between text-base">
+                  <span className="font-semibold text-stone-900">Total</span>
+                  <span className="font-bold tabular-nums text-stone-900">{peso(totalCents)}</span>
+                </div>
               </div>
-            </div>
+            </>
           )}
-        </div>
+        </Card>
+
+        <p className="mt-6 text-center text-xs text-stone-500">
+          Final Destination Services - Handling things. Quietly
+        </p>
       </div>
     </div>
   );
 }
+
+

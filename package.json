@@ -9,17 +9,26 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@fontsource/inter": "^5.2.8",
+    "@radix-ui/react-separator": "^1.1.8",
+    "@radix-ui/react-slot": "^1.2.4",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.49.1",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.563.0",
     "next": "^16.0.10",
     "react": "^19.0.1",
-    "react-dom": "^19.0.1"
+    "react-dom": "^19.0.1",
+    "tailwind-merge": "^3.4.0",
+    "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
     "autoprefixer": "^10.4.20",
+    "baseline-browser-mapping": "^2.9.19",
     "eslint": "^9.17.0",
     "eslint-config-next": "^16.1.1",
     "postcss": "^8.4.49",
@@ -27,4 +36,3 @@
     "typescript": "^5.7.2"
   }
 }
-

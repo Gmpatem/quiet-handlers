@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import ProductForm, { ProductRow } from "./ProductForm";
 import { supabaseBrowser } from "@/lib/supabase/browser";
@@ -88,6 +89,20 @@ export default function ProductsClient({ initialProducts }: { initialProducts: P
         >
           + New Product
         </button>
+        
+        <Link
+          href="/admin/inventory"
+          className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50"
+        >
+          Inventory Manager →
+        </Link>
+        
+        <Link
+          href="/admin/inventory"
+          className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50"
+        >
+          Inventory Manager →
+        </Link>
       </div>
 
       <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -221,3 +236,5 @@ export default function ProductsClient({ initialProducts }: { initialProducts: P
     </div>
   );
 }
+
+
