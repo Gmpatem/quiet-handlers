@@ -8,6 +8,7 @@ import {
   ChevronRight,
   X,
   CheckCircle,
+  TrendingUp,
   AlertCircle,
 } from "lucide-react";
 
@@ -42,27 +43,6 @@ function normalizeCategory(c?: string | null) {
   return v || "Other";
 }
 
-// Category emoji mapping
-function getCategoryEmoji(category: string): string {
-  const cat = category.toLowerCase();
-  if (cat === "all") return "📦";
-  if (cat.includes("biscuit") || cat.includes("cookie")) return "🍪";
-  if (cat.includes("coffee") || cat.includes("kape")) return "☕";
-  if (cat.includes("drink") || cat.includes("beverage")) return "🥤";
-  if (cat.includes("can") || cat.includes("canned")) return "🥫";
-  if (cat.includes("noodle") || cat.includes("pasta")) return "🍜";
-  if (cat.includes("chip") || cat.includes("snack")) return "🍿";
-  if (cat.includes("juice")) return "🧃";
-  return "🍱";
-}
-
-// Get short category name
-function getShortName(category: string): string {
-  if (category === ALL) return "All";
-  if (category.length <= 3) return category;
-  return category.substring(0, 3);
-}
-
 export default function Storefront({
   settings,
   products: initialProducts,
@@ -77,11 +57,6 @@ export default function Storefront({
   const [cart, setCart] = useState<CartItem[]>([]);
   const [showCartDetails, setShowCartDetails] = useState(false);
   const [addedToCartId, setAddedToCartId] = useState<string | null>(null);
-
-  // Pull-to-refresh state
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [pullDistance, setPullDistance] = useState(0);
-  const [startY, setStartY] = useState(0);
 
   useEffect(() => {
     try {
@@ -248,116 +223,30 @@ export default function Storefront({
     return list;
   }, [products]);
 
-  // Pull-to-refresh handlers
-  const handleTouchStart = (e: React.TouchEvent) => {
-    if (window.scrollY === 0 && !isRefreshing) {
-      setStartY(e.touches[0].clientY);
-    }
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (startY === 0 || isRefreshing) return;
-    
-    const currentY = e.touches[0].clientY;
-    const distance = currentY - startY;
-    
-    if (distance > 0 && window.scrollY === 0) {
-      setPullDistance(Math.min(distance, 80));
-    }
-  };
-
-  const handleTouchEnd = async () => {
-    if (pullDistance > 60 && !isRefreshing) {
-      setIsRefreshing(true);
-      setPullDistance(0);
-      setStartY(0);
-      
-      // Refresh products
-      await loadProductsFor(activeCat);
-      
-      setTimeout(() => {
-        setIsRefreshing(false);
-      }, 500);
-    } else {
-      setPullDistance(0);
-      setStartY(0);
-    }
-  };
-
-  const promoText = settings?.promo_text || "🎉 Flash Sale! 20% off all drinks this weekend!";
-
   return (
-    <div 
-      className="min-h-screen bg-gradient-to-b from-stone-50 to-white pb-24"
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-    >
-      {/* Pull-to-Refresh Indicator */}
-      {(pullDistance > 0 || isRefreshing) && (
-        <div 
-          className="fixed left-0 right-0 top-[48px] z-30 flex items-center justify-center bg-white/95 backdrop-blur-sm transition-all"
-          style={{ height: `${pullDistance}px`, opacity: pullDistance / 60 }}
-        >
-          <div className="text-center">
-            {isRefreshing ? (
-              <>
-                <div className="mb-1 inline-block h-5 w-5 animate-spin rounded-full border-2 border-amber-700 border-t-transparent" />
-                <div className="text-xs text-stone-600">Refreshing...</div>
-              </>
-            ) : pullDistance > 60 ? (
-              <div className="text-xs text-stone-600">↑ Release to refresh</div>
-            ) : (
-              <div className="text-xs text-stone-600">↓ Pull to refresh</div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Category Tabs - Ultra Compact with Emoji */}
-      <div className="sticky top-[48px] z-40 border-b border-stone-100 bg-white">
+    <div className="min-h-screen bg-gradient-to-b from-stone-50/30 to-white pb-24">
+      {/* Category Tabs - Right Below Header */}
+      <div className="sticky top-[57px] z-40 border-b border-stone-100 bg-white">
         <div className="mx-auto max-w-7xl">
-          <div className="flex gap-1.5 overflow-x-auto px-4 py-1.5 scrollbar-hide">
+          <div className="flex gap-1.5 overflow-x-auto px-4 py-2.5 scrollbar-hide">
             {categories.map((c) => {
               const active = c === activeCat;
-              const emoji = getCategoryEmoji(c);
-              const shortName = getShortName(c);
-              
               return (
                 <button
                   key={c}
                   onClick={() => setActiveCat(c)}
-                  className="flex flex-shrink-0 flex-col items-center gap-0.5 transition"
+                  className={[
+                    "touch-target flex-shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition",
+                    active
+                      ? "bg-gradient-to-r from-amber-700 to-amber-900 text-white shadow-sm"
+                      : "text-stone-700 hover:bg-stone-100",
+                  ].join(" ")}
                 >
-                  <div
-                    className={[
-                      "flex h-10 w-10 items-center justify-center rounded-full text-base transition",
-                      active
-                        ? "bg-gradient-to-r from-amber-700 to-amber-900 shadow-sm"
-                        : "bg-stone-100 hover:bg-stone-200",
-                    ].join(" ")}
-                  >
-                    <span className={active ? "text-white" : ""}>{emoji}</span>
-                  </div>
-                  <span
-                    className={[
-                      "text-xs font-medium",
-                      active ? "text-amber-900" : "text-stone-600",
-                    ].join(" ")}
-                  >
-                    {shortName}
-                  </span>
+                  {c}
                 </button>
               );
             })}
           </div>
-        </div>
-      </div>
-
-      {/* Promo Banner - Scrolling Animation */}
-      <div className="overflow-hidden border-b border-amber-200 bg-gradient-to-r from-amber-500 to-amber-600">
-        <div className="animate-marquee whitespace-nowrap py-2 text-sm font-medium text-white">
-          {promoText} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {promoText} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {promoText}
         </div>
       </div>
 
@@ -373,33 +262,24 @@ export default function Storefront({
 
       {/* Error Display */}
       {loadErr && (
-        <div className="mx-4 mt-3 flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 p-4">
+        <div className="mx-4 mt-4 flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 p-4">
           <AlertCircle className="h-5 w-5 text-red-500" />
           <div className="text-sm text-red-700">Failed to load products: {loadErr}</div>
         </div>
       )}
 
-      {/* Product Grid - Ultra Tight Spacing */}
+      {/* Product Count */}
       <div className="mx-auto max-w-7xl px-4 py-3">
-        <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {/* Skeleton Loading Cards */}
-          {loading &&
-            Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="overflow-hidden rounded-xl border border-stone-50 bg-white p-1.5 shadow-md">
-                {/* Skeleton Image with Shimmer */}
-                <div className="aspect-square animate-shimmer rounded-lg bg-gradient-to-r from-stone-200 via-stone-100 to-stone-200 bg-[length:200%_100%]" />
-                {/* Skeleton Name */}
-                <div className="mt-1.5 h-3 w-full animate-pulse rounded bg-stone-200" />
-                <div className="mt-1 h-3 w-2/3 animate-pulse rounded bg-stone-200" />
-                {/* Skeleton Price */}
-                <div className="mt-1 h-3 w-1/2 animate-pulse rounded bg-stone-200" />
-                {/* Skeleton Button */}
-                <div className="mt-1.5 h-8 w-full animate-pulse rounded-xl bg-stone-200" />
-              </div>
-            ))}
+        <div className="flex items-center gap-2 text-sm text-stone-600">
+          <TrendingUp className="h-4 w-4" />
+          <span>{loading ? "Loading..." : `${sortedProducts.length} items available`}</span>
+        </div>
+      </div>
 
-          {/* Actual Product Cards */}
-          {!loading && sortedProducts.map((p) => {
+      {/* Product Grid - 2 Columns on Mobile */}
+      <div className="mx-auto max-w-7xl px-4">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          {sortedProducts.map((p) => {
             const stock = p.stock_qty ?? 0;
             const out = stock <= 0;
             const low = !out && stock > 0 && stock <= 5;
@@ -409,13 +289,13 @@ export default function Storefront({
               <div
                 key={p.id}
                 className={[
-                  "group relative overflow-hidden rounded-xl border border-stone-50 bg-white p-1.5 shadow-md transition-all hover:shadow-lg",
+                  "group relative rounded-2xl border border-stone-200 bg-white p-3 shadow-sm transition-all hover:shadow-md",
                   out ? "opacity-75" : "",
                   justAdded ? "ring-2 ring-emerald-500 ring-offset-2" : "",
                 ].join(" ")}
               >
                 {/* Product Image */}
-                <div className="relative aspect-square overflow-hidden rounded-lg bg-gradient-to-br from-stone-50 to-white">
+                <div className="relative aspect-square overflow-hidden rounded-xl border border-stone-200 bg-gradient-to-br from-stone-50 to-white">
                   {p.photo_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -430,7 +310,7 @@ export default function Storefront({
                     </div>
                   )}
 
-                  {/* Stock Badge - Compact */}
+                  {/* Stock Badge */}
                   {(out || low) && (
                     <div
                       className={[
@@ -440,23 +320,23 @@ export default function Storefront({
                           : "border border-amber-200 bg-amber-100 text-amber-800",
                       ].join(" ")}
                     >
-                      {out ? "Out" : stock}
+                      {out ? "Out" : `${stock}`}
                     </div>
                   )}
                 </div>
 
-                {/* Product Info - Compact */}
-                <div className="mt-1.5">
-                  <h4 className="line-clamp-2 text-xs font-semibold leading-snug text-stone-900">{p.name}</h4>
-                  <div className="mt-1 text-sm font-bold text-stone-900">{peso(p.price_cents)}</div>
+                {/* Product Info */}
+                <div className="mt-2.5">
+                  <h4 className="line-clamp-2 text-sm font-semibold leading-tight text-stone-900">{p.name}</h4>
+                  <div className="mt-1.5 text-base font-bold text-stone-900">{peso(p.price_cents)}</div>
                 </div>
 
-                {/* Add Button - UNCHANGED! PERFECT! */}
+                {/* Add Button */}
                 <button
                   disabled={out}
                   onClick={() => add(p)}
                   className={[
-                    "mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition active:scale-95",
+                    "mt-2.5 touch-target flex w-full items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition active:scale-95",
                     out
                       ? "cursor-not-allowed bg-stone-100 text-stone-400"
                       : "bg-gradient-to-r from-amber-700 to-amber-900 text-white hover:from-amber-800 hover:to-amber-950",
@@ -474,6 +354,19 @@ export default function Storefront({
               </div>
             );
           })}
+
+          {/* Loading Skeleton */}
+          {loading &&
+            Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="rounded-2xl border border-stone-200 bg-white p-3">
+                <div className="aspect-square animate-pulse rounded-xl bg-stone-200" />
+                <div className="mt-2.5 space-y-2">
+                  <div className="h-3 animate-pulse rounded bg-stone-200" />
+                  <div className="h-3 w-2/3 animate-pulse rounded bg-stone-200" />
+                  <div className="h-4 w-1/2 animate-pulse rounded bg-stone-200" />
+                </div>
+              </div>
+            ))}
         </div>
 
         {/* Empty State */}
@@ -515,7 +408,7 @@ export default function Storefront({
                 </div>
                 <button
                   onClick={() => setShowCartDetails(false)}
-                  className="rounded-full p-2 transition hover:bg-stone-100 active:scale-95"
+                  className="touch-target rounded-full p-2 hover:bg-stone-100"
                 >
                   <X className="h-5 w-5" />
                 </button>
@@ -553,14 +446,14 @@ export default function Storefront({
                         <div className="mt-2 flex items-center gap-2">
                           <button
                             onClick={() => setQty(i.id, i.qty - 1)}
-                            className="h-8 w-8 rounded-xl border border-stone-200 text-stone-700 transition hover:bg-stone-50 active:scale-95"
+                            className="touch-target h-8 w-8 rounded-xl border border-stone-200 text-stone-700 transition hover:bg-stone-50"
                           >
                             −
                           </button>
                           <div className="min-w-[32px] text-center font-bold text-stone-900">{i.qty}</div>
                           <button
                             onClick={() => setQty(i.id, i.qty + 1)}
-                            className="h-8 w-8 rounded-xl border border-amber-700 bg-amber-700 text-white transition hover:bg-amber-800 active:scale-95"
+                            className="touch-target h-8 w-8 rounded-xl border border-amber-700 bg-amber-700 text-white transition hover:bg-amber-800"
                           >
                             +
                           </button>
@@ -580,7 +473,7 @@ export default function Storefront({
                   </div>
                   <button
                     onClick={checkout}
-                    className="w-full rounded-2xl bg-gradient-to-r from-amber-700 to-amber-900 px-6 py-4 text-base font-bold text-white shadow-lg transition hover:from-amber-800 hover:to-amber-950 active:scale-[0.98]"
+                    className="touch-target w-full rounded-2xl bg-gradient-to-r from-amber-700 to-amber-900 px-6 py-4 text-base font-bold text-white shadow-lg transition hover:from-amber-800 hover:to-amber-950 active:scale-[0.98]"
                   >
                     Checkout Now
                     <ChevronRight className="ml-2 inline-block h-5 w-5" />
@@ -597,7 +490,7 @@ export default function Storefront({
         <div className="mx-auto max-w-7xl">
           <button
             onClick={() => setShowCartDetails(true)}
-            className="flex w-full items-center justify-between rounded-2xl bg-gradient-to-r from-stone-600 to-amber-900 px-5 py-3.5 text-white shadow-lg transition hover:shadow-xl active:scale-[0.98]"
+            className="touch-target flex w-full items-center justify-between rounded-2xl bg-gradient-to-r from-stone-600 to-amber-900 px-5 py-3.5 text-white shadow-lg transition hover:shadow-xl active:scale-[0.98]"
           >
             <div className="flex items-center gap-3">
               <div className="relative">
@@ -609,9 +502,9 @@ export default function Storefront({
                 )}
               </div>
               <div className="text-left">
-                <div className="text-sm font-semibold">Cart</div>
+                <div className="text-sm font-semibold">View Cart</div>
                 <div className="text-xs opacity-90">
-                  {cartCount > 0 ? `${cartCount} item${cartCount !== 1 ? "s" : ""}` : "Empty"}
+                  {cartCount > 0 ? `${cartCount} item${cartCount !== 1 ? "s" : ""}` : "No items"}
                 </div>
               </div>
             </div>
@@ -619,41 +512,6 @@ export default function Storefront({
           </button>
         </div>
       </div>
-
-      {/* Custom Animations */}
-      <style jsx global>{`
-        @keyframes shimmer {
-          0% { background-position: -200% 0; }
-          100% { background-position: 200% 0; }
-        }
-        
-        .animate-shimmer {
-          animation: shimmer 1.5s infinite linear;
-        }
-        
-        @keyframes marquee {
-          0% { transform: translateX(0); }
-          100% { transform: translateX(-33.333%); }
-        }
-        
-        .animate-marquee {
-          animation: marquee 20s linear infinite;
-        }
-        
-        .scrollbar-hide::-webkit-scrollbar {
-          display: none;
-        }
-        
-        .scrollbar-hide {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-        }
-        
-        .touch-target {
-          min-height: 44px;
-          min-width: 44px;
-        }
-      `}</style>
     </div>
   );
 }
