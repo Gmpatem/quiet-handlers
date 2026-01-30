@@ -240,7 +240,7 @@ const { data, error } = await supabase.rpc("place_order_atomic", {
   p_delivery_location: "",
   p_payment_method: paymentMethod,
   p_payment_status: paymentStatusDefault,
-  p_payment_ref: paymentMethod === "gcash" ? gcashRef.trim() : "",
+  p_payment_ref: paymentMethod === "gcash" ? gcashRef.trim() : null,
   p_items: items,
 });
 
@@ -348,6 +348,8 @@ window.location.href = `/order/success/${data?.order_code ?? order_code}`;
                     <Field label="Your name">
                       <input
                         value={customerName}
+                        id="customer_name"
+                        name="customer_name"
                         onChange={(e) => setCustomerName(e.target.value)}
                         placeholder="e.g. Juan D."
                         className="w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm shadow-sm outline-none focus:border-amber-700 focus:ring-2 focus:ring-amber-700/20"
@@ -485,9 +487,11 @@ window.location.href = `/order/success/${data?.order_code ?? order_code}`;
                         )}
 
                         <div className="mt-4">
-                          <label className="text-xs font-semibold text-amber-900">GCash reference number</label>
+                          <label htmlFor="gcash_ref" className="text-xs font-semibold text-amber-900">GCash reference number</label>
                           <input
                             value={gcashRef}
+                            id="gcash_ref"
+                            name="gcash_ref"
                             onChange={(e) => setGcashRef(e.target.value)}
                             placeholder="Enter reference number"
                             className="mt-1 w-full rounded-xl border border-amber-300 bg-white px-4 py-3 text-sm shadow-sm outline-none focus:border-amber-700 focus:ring-2 focus:ring-amber-700/20"
@@ -613,5 +617,7 @@ window.location.href = `/order/success/${data?.order_code ?? order_code}`;
     </div>
   );
 }
+
+
 
 
