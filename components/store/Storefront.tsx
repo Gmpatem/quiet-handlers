@@ -9,10 +9,7 @@ import {
   X,
   CheckCircle,
   TrendingUp,
-  Clock,
   AlertCircle,
-  Printer,
-  Settings,
 } from "lucide-react";
 
 type Product = {
@@ -226,75 +223,32 @@ export default function Storefront({
     return list;
   }, [products]);
 
-  const heroSubtitle = (settings?.landing_hero_subtitle ?? "Final Destination Services") as string;
-
   return (
     <div className="min-h-screen bg-gradient-to-b from-stone-50/30 to-white pb-24">
-      {/* Mobile Header */}
-      <header className="sticky top-0 z-40 border-b border-stone-200 bg-white/95 backdrop-blur-sm">
+      {/* Category Tabs - Right Below Header */}
+      <div className="sticky top-[57px] z-40 border-b border-stone-100 bg-white">
         <div className="mx-auto max-w-7xl">
-          {/* Top Row: Logo + Store Name + Action Icons */}
-          <div className="flex items-center justify-between gap-3 px-4 py-3">
-            {/* Logo + Store Name */}
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-stone-600 to-amber-900 text-xs font-bold text-white shadow-sm">
-                FDS
-              </div>
-              <div className="hidden sm:block">
-                <div className="text-sm font-bold text-stone-900">{heroSubtitle}</div>
-                <div className="text-xs text-stone-600">Handling things. Quietly</div>
-              </div>
-              <div className="text-sm font-bold text-stone-900 sm:hidden">FDS Store</div>
-            </div>
-
-            {/* Action Icons */}
-            <div className="flex items-center gap-2">
-              {/* Print Service Button */}
-              <a
-                href="/print"
-                className="touch-target flex h-10 w-10 items-center justify-center rounded-xl border border-stone-200 bg-white text-stone-700 transition hover:border-amber-700 hover:bg-amber-50 active:scale-95"
-                title="Print Service"
-                aria-label="Print Service"
-              >
-                <Printer className="h-4 w-4" />
-              </a>
-
-              {/* Admin Button */}
-              <a
-                href="/admin"
-                className="touch-target flex h-10 w-10 items-center justify-center rounded-xl border border-stone-200 bg-white text-stone-700 transition hover:border-amber-700 hover:bg-amber-50 active:scale-95"
-                title="Admin"
-                aria-label="Admin"
-              >
-                <Settings className="h-4 w-4" />
-              </a>
-            </div>
-          </div>
-
-          {/* Category Tabs - Horizontal Scroll */}
-          <div className="border-t border-stone-100 bg-white">
-            <div className="flex gap-1.5 overflow-x-auto px-4 py-2.5 scrollbar-hide">
-              {categories.map((c) => {
-                const active = c === activeCat;
-                return (
-                  <button
-                    key={c}
-                    onClick={() => setActiveCat(c)}
-                    className={[
-                      "touch-target flex-shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition",
-                      active
-                        ? "bg-gradient-to-r from-amber-700 to-amber-900 text-white shadow-sm"
-                        : "text-stone-700 hover:bg-stone-100",
-                    ].join(" ")}
-                  >
-                    {c}
-                  </button>
-                );
-              })}
-            </div>
+          <div className="flex gap-1.5 overflow-x-auto px-4 py-2.5 scrollbar-hide">
+            {categories.map((c) => {
+              const active = c === activeCat;
+              return (
+                <button
+                  key={c}
+                  onClick={() => setActiveCat(c)}
+                  className={[
+                    "touch-target flex-shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition",
+                    active
+                      ? "bg-gradient-to-r from-amber-700 to-amber-900 text-white shadow-sm"
+                      : "text-stone-700 hover:bg-stone-100",
+                  ].join(" ")}
+                >
+                  {c}
+                </button>
+              );
+            })}
           </div>
         </div>
-      </header>
+      </div>
 
       {/* Added to Cart Toast */}
       {addedToCartId && (
@@ -356,7 +310,7 @@ export default function Storefront({
                     </div>
                   )}
 
-                  {/* Stock Badge - Compact */}
+                  {/* Stock Badge */}
                   {(out || low) && (
                     <div
                       className={[
@@ -371,13 +325,13 @@ export default function Storefront({
                   )}
                 </div>
 
-                {/* Product Info - Compact */}
+                {/* Product Info */}
                 <div className="mt-2.5">
                   <h4 className="line-clamp-2 text-sm font-semibold leading-tight text-stone-900">{p.name}</h4>
                   <div className="mt-1.5 text-base font-bold text-stone-900">{peso(p.price_cents)}</div>
                 </div>
 
-                {/* Add Button - Compact */}
+                {/* Add Button */}
                 <button
                   disabled={out}
                   onClick={() => add(p)}
@@ -421,9 +375,7 @@ export default function Storefront({
             <Package className="mx-auto h-12 w-12 text-stone-400" />
             <div className="mt-3 font-medium text-stone-600">No products found</div>
             <div className="mt-1 text-sm text-stone-500">
-              {activeCat === ALL
-                ? "Check back later for new items!"
-                : `No products in ${activeCat} category`}
+              {activeCat === ALL ? "Check back later for new items!" : `No products in ${activeCat} category`}
             </div>
             {activeCat !== ALL && (
               <button
