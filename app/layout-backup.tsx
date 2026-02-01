@@ -15,9 +15,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="min-h-screen bg-gradient-to-b from-stone-50/30 via-white to-stone-50/20 font-sans antialiased">
-        {/* Removed padding - allows header to stretch edge-to-edge */}
-        <div className="relative min-h-screen">{children}</div>
+        <div className="relative min-h-screen p-4 sm:p-6 lg:p-8">{children}</div>
       </body>
     </html>
   );
 }
+
+
