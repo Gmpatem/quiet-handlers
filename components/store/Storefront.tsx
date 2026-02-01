@@ -129,20 +129,21 @@ export default function Storefront({
   const [loading, setLoading] = useState<boolean>(false);
   const [loadErr, setLoadErr] = useState<string | null>(productsError ?? null);
 
+  // FIXED: Show ALL categories with active products (regardless of stock)
   useEffect(() => {
     const all = cache[ALL] ?? [];
     const counts = new Map<string, number>();
 
     for (const p of all) {
-      // Only count items that have stock
-      if ((p.stock_qty ?? 0) > 0 && p.is_active) {
+      // Only check if product is active - DON'T check stock here
+      if (p.is_active) {
         const cat = normalizeCategory(p.category);
         counts.set(cat, (counts.get(cat) ?? 0) + 1);
       }
     }
 
     let arr = Array.from(counts.entries())
-      .filter(([, n]) => n > 0) // Only categories with items in stock
+      .filter(([, n]) => n > 0) // Categories with active products (even if out of stock)
       .map(([c]) => c);
 
     if (settingOrder?.length) {
@@ -178,6 +179,7 @@ export default function Storefront({
     setLoadErr(null);
 
     if (cache[cat]) {
+      // Show all products from cache (including out of stock)
       setProducts(cache[cat]);
       return;
     }
@@ -205,8 +207,8 @@ export default function Storefront({
         setLoadErr(error.message);
         setProducts([]);
       } else {
-        // Filter products to only show those with stock > 0
-        const list = ((data ?? []) as Product[]).filter(p => (p.stock_qty ?? 0) > 0);
+        const list = ((data ?? []) as Product[]);
+        // Store ALL products in cache (including out of stock)
         setProducts(list);
         setCache((prev) => ({ ...prev, [cat]: list }));
       }
@@ -226,6 +228,7 @@ export default function Storefront({
 
   const sortedProducts = useMemo(() => {
     const list = (products ?? []).slice();
+    // Sort: in-stock first, then by name
     list.sort((a, b) => {
       const aOut = (a.stock_qty ?? 0) <= 0;
       const bOut = (b.stock_qty ?? 0) <= 0;
@@ -331,7 +334,7 @@ export default function Storefront({
             </div>
           </div>
 
-          {/* Category Pills - Full width scrolling, only shows categories with items in stock */}
+          {/* Category Pills - Full width scrolling, shows ALL categories with active products */}
           <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2">
             {categories.map((c) => {
               const active = c === activeCat;
@@ -508,7 +511,7 @@ export default function Storefront({
                   </div>
                 ))}
 
-              {/* Products - Already filtered to show only items with stock */}
+              {/* Products - Show ALL products including out-of-stock */}
               {!loading && sortedProducts.map((p) => {
                 const stock = p.stock_qty ?? 0;
                 const out = stock <= 0;
@@ -521,7 +524,7 @@ export default function Storefront({
                     className={`
                       group relative overflow-hidden rounded-xl border border-stone-100 bg-white p-2 shadow-sm transition-all duration-300 
                       sm:p-2.5 lg:p-3
-                      ${out ? "opacity-75" : "hover:-translate-y-1 hover:shadow-md"}
+                      ${out ? "opacity-70 grayscale-20" : "hover:-translate-y-1 hover:shadow-md"}
                       ${justAdded ? "ring-2 ring-emerald-500 ring-offset-2" : ""}
                     `}
                   >
@@ -540,12 +543,16 @@ export default function Storefront({
                         </div>
                       )}
 
-                      {/* Stock Badge - Only show if low stock, not if out (since we filter those out) */}
-                      {low && (
-                        <div className="absolute right-2 top-2 rounded-lg px-1.5 py-0.5 text-xs font-semibold shadow-sm border border-amber-200 bg-amber-100 text-amber-800">
-                          {stock}
-                        </div>
-                      )}
+                      {/* Stock Badge - Shows stock quantity with color coding */}
+                      <div className={`absolute right-2 top-2 rounded-lg px-1.5 py-0.5 text-xs font-semibold shadow-sm border ${
+                        out 
+                          ? 'border-red-200 bg-red-100 text-red-800' 
+                          : low 
+                            ? 'border-amber-200 bg-amber-100 text-amber-800' 
+                            : 'border-emerald-200 bg-emerald-100 text-emerald-800'
+                      }`}>
+                        {out ? 'Out' : stock}
+                      </div>
                     </div>
 
                     {/* Product Info */}
@@ -556,17 +563,27 @@ export default function Storefront({
                       <div className="mt-1 font-bold text-stone-900 sm:text-base lg:text-lg">
                         {peso(p.price_cents)}
                       </div>
+                      {/* Stock status text */}
+                      <div className={`mt-0.5 text-xs font-medium ${
+                        out ? 'text-red-600' : low ? 'text-amber-600' : 'text-emerald-600'
+                      }`}>
+                        {out ? 'Out of stock' : low ? 'Low stock' : 'In stock'}
+                      </div>
                     </div>
 
-                    {/* Add to Cart Button - Only enabled for items with stock */}
+                    {/* Add to Cart Button - Disabled for out of stock items */}
                     <button
                       onClick={() => add(p)}
+                      disabled={out}
                       className={`
                         mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold 
                         transition-all duration-300 active:scale-95 sm:mt-2 sm:py-2 sm:text-sm lg:py-2.5
+                        disabled:opacity-50 disabled:cursor-not-allowed
                         ${justAdded
                           ? "bg-gradient-to-r from-emerald-500 to-emerald-600 text-white"
-                          : "bg-gradient-to-r from-amber-700 to-amber-900 text-white hover:from-amber-800 hover:to-amber-950"
+                          : out
+                            ? "bg-gradient-to-r from-stone-400 to-stone-500 text-white"
+                            : "bg-gradient-to-r from-amber-700 to-amber-900 text-white hover:from-amber-800 hover:to-amber-950"
                         }
                       `}
                     >
@@ -574,6 +591,11 @@ export default function Storefront({
                         <>
                           <CheckCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                           <span className="hidden sm:inline">Added</span>
+                        </>
+                      ) : out ? (
+                        <>
+                          <Package className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                          <span>Out of Stock</span>
                         </>
                       ) : (
                         <>
@@ -595,7 +617,7 @@ export default function Storefront({
                 <div className="mt-1 text-xs text-stone-600 sm:text-sm">
                   {activeCat === ALL 
                     ? "Check back later for new items!" 
-                    : `No products in "${activeCat}" category`
+                    : `No active products in "${activeCat}" category`
                   }
                 </div>
                 {activeCat !== ALL && (
@@ -603,7 +625,7 @@ export default function Storefront({
                     onClick={() => setActiveCat(ALL)}
                     className="mt-4 rounded-xl bg-gradient-to-r from-amber-700 to-amber-900 px-4 py-2 text-sm font-semibold text-white transition hover:from-amber-800 hover:to-amber-950"
                   >
-                    View All Products
+                    View All Categories
                   </button>
                 )}
               </div>

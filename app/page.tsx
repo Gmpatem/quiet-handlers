@@ -19,15 +19,18 @@ export default async function HomePage() {
       .select("id, name, category, price_cents, stock_qty, is_active, photo_url")
       .eq("is_active", true)
       .order("name", { ascending: true })
-      .limit(50); // Limit for initial load
+      .limit(100); // Increased limit to ensure all categories appear
 
     if (error) {
       productsError = error.message;
+      console.error("Products fetch error:", error);
     } else {
       initialProducts = data || [];
+      console.log(`Loaded ${initialProducts.length} initial products for categories`);
     }
   } catch (error: any) {
     productsError = error?.message || "Failed to load products";
+    console.error("Products fetch exception:", error);
   }
 
   return (
@@ -39,8 +42,8 @@ export default async function HomePage() {
         productsError={productsError} 
       />
 
-      {/* Enhanced Footer */}
-      <footer className="border-t border-stone-200 bg-gradient-to-b from-white to-stone-50 py-6 px-4 sm:px-6 lg:px-8">
+      {/* Enhanced Footer - Hidden on mobile since Storefront has bottom cart button */}
+      <footer className="hidden lg:block border-t border-stone-200 bg-gradient-to-b from-white to-stone-50 py-6 px-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-7xl">
           <div className="flex flex-col items-center justify-between gap-4 sm:flex-row">
             <div className="text-center sm:text-left">
@@ -68,11 +71,61 @@ export default async function HomePage() {
               >
                 Contact Us
               </a>
+              <a 
+                href="/admin" 
+                className="text-xs text-stone-500 hover:text-stone-900 transition-colors"
+              >
+                Admin
+              </a>
             </div>
           </div>
           <div className="mt-6 text-center">
             <p className="text-xs text-stone-500">
               © {new Date().getFullYear()} Final Destination Services. All rights reserved.
+            </p>
+          </div>
+        </div>
+      </footer>
+
+      {/* Mobile-optimized footer */}
+      <footer className="lg:hidden border-t border-stone-200 bg-gradient-to-b from-white to-stone-50 pt-6 pb-20 px-4">
+        <div className="text-center">
+          <h3 className="text-sm font-semibold text-stone-900">Final Destination Services</h3>
+          <p className="mt-1 text-xs text-stone-600">
+            Campus convenience, handled quietly.
+          </p>
+          <div className="mt-4 flex flex-wrap justify-center gap-3">
+            <a 
+              href="/terms" 
+              className="text-xs text-stone-500 hover:text-stone-900 transition-colors"
+            >
+              Terms
+            </a>
+            <span className="text-xs text-stone-300">•</span>
+            <a 
+              href="/privacy" 
+              className="text-xs text-stone-500 hover:text-stone-900 transition-colors"
+            >
+              Privacy
+            </a>
+            <span className="text-xs text-stone-300">•</span>
+            <a 
+              href="/contact" 
+              className="text-xs text-stone-500 hover:text-stone-900 transition-colors"
+            >
+              Contact
+            </a>
+            <span className="text-xs text-stone-300">•</span>
+            <a 
+              href="/admin" 
+              className="text-xs text-stone-500 hover:text-stone-900 transition-colors"
+            >
+              Admin
+            </a>
+          </div>
+          <div className="mt-4 text-center">
+            <p className="text-xs text-stone-500">
+              © {new Date().getFullYear()} FDS
             </p>
           </div>
         </div>
