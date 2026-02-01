@@ -1,0 +1,30 @@
+name: Mirror to bigdev repo
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+
+      - name: Add mirror remote
+        run: |
+          git remote remove mirror || true
+          git remote add mirror https://x-access-token:${{ secrets.MIRROR_TOKEN }}@github.com/bigdev830-glitch/tenpesorun.git
+
+      - name: Push to bigdev mirror
+        run: |
+          git push mirror main --force

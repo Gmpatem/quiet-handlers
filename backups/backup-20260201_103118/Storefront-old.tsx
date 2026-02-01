@@ -283,7 +283,7 @@ export default function Storefront({
     }
   };
 
-  const promoText = settings?.promo_text || "sweet deals coming soon !!";
+  const promoText = settings?.promo_text || "🎉 Flash Sale! 20% off all drinks this weekend!";
 
   return (
     <div
@@ -626,9 +626,7 @@ export default function Storefront({
                   </div>
                 </div>
                 <button
-                  type="button"
                   onClick={() => setShowCartDetails(false)}
-                  aria-label="Close cart"
                   className="rounded-full p-2 transition hover:bg-stone-100 active:scale-95"
                 >
                   <X className="h-5 w-5" />

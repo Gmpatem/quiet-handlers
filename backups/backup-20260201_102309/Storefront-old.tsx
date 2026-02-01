@@ -51,12 +51,12 @@ function getCategoryEmoji(category: string): string {
   if (cat.includes("drink") || cat.includes("beverage")) return "🥤";
   if (cat.includes("can") || cat.includes("canned")) return "🥫";
   if (cat.includes("noodle") || cat.includes("pasta")) return "🍜";
-  if (cat.includes("chip") || cat.includes("snack")) return "🍟";
+  if (cat.includes("chip") || cat.includes("snack")) return "🍿";
   if (cat.includes("juice")) return "🧃";
   return "🍱";
 }
 
-// Get short category name for mobile
+// Get short category name
 function getShortName(category: string): string {
   if (category === ALL) return "All";
   if (category.length <= 3) return category;
@@ -257,10 +257,10 @@ export default function Storefront({
 
   const handleTouchMove = (e: React.TouchEvent) => {
     if (startY === 0 || isRefreshing) return;
-
+    
     const currentY = e.touches[0].clientY;
     const distance = currentY - startY;
-
+    
     if (distance > 0 && window.scrollY === 0) {
       setPullDistance(Math.min(distance, 80));
     }
@@ -271,9 +271,10 @@ export default function Storefront({
       setIsRefreshing(true);
       setPullDistance(0);
       setStartY(0);
-
+      
+      // Refresh products
       await loadProductsFor(activeCat);
-
+      
       setTimeout(() => {
         setIsRefreshing(false);
       }, 500);
@@ -283,19 +284,19 @@ export default function Storefront({
     }
   };
 
-  const promoText = settings?.promo_text || "sweet deals coming soon !!";
+  const promoText = settings?.promo_text || "🎉 Flash Sale! 20% off all drinks this weekend!";
 
   return (
-    <div
-      className="min-h-screen bg-gradient-to-b from-stone-50 to-white pb-24 lg:pb-0"
+    <div 
+      className="min-h-screen bg-gradient-to-b from-stone-50 to-white pb-24"
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
       {/* Pull-to-Refresh Indicator */}
       {(pullDistance > 0 || isRefreshing) && (
-        <div
-          className="fixed left-0 right-0 top-[52px] z-30 flex items-center justify-center bg-white/95 backdrop-blur-sm transition-all sm:top-[64px] lg:top-[80px]"
+        <div 
+          className="fixed left-0 right-0 top-[48px] z-30 flex items-center justify-center bg-white/95 backdrop-blur-sm transition-all"
           style={{ height: `${pullDistance}px`, opacity: pullDistance / 60 }}
         >
           <div className="text-center">
@@ -313,304 +314,191 @@ export default function Storefront({
         </div>
       )}
 
-      {/* Desktop Layout with Sidebar */}
-      <div className="mx-auto max-w-[1600px] lg:flex lg:gap-6 lg:px-6 lg:py-6">
-        {/* Main Content */}
-        <div className="flex-1">
-          {/* Category Tabs - Responsive */}
-          <div className="sticky top-[52px] z-40 border-b border-stone-100 bg-white sm:top-[64px] lg:top-0 lg:rounded-t-2xl">
-            <div className="mx-auto max-w-7xl">
-              {/* MOBILE: Icon Circles */}
-              <div className="flex gap-1.5 overflow-x-auto px-4 py-2 scrollbar-hide sm:hidden">
-                {categories.map((c) => {
-                  const active = c === activeCat;
-                  const emoji = getCategoryEmoji(c);
-                  const shortName = getShortName(c);
-
-                  return (
-                    <button
-                      key={c}
-                      onClick={() => setActiveCat(c)}
-                      className="flex flex-shrink-0 flex-col items-center gap-0.5 transition"
-                    >
-                      <div
-                        className={[
-                          "flex h-10 w-10 items-center justify-center rounded-full text-base transition",
-                          active
-                            ? "bg-gradient-to-r from-amber-700 to-amber-900 shadow-sm"
-                            : "bg-amber-50 hover:bg-amber-100",
-                        ].join(" ")}
-                      >
-                        <span className={active ? "text-white" : ""}>{emoji}</span>
-                      </div>
-                      <span
-                        className={[
-                          "text-xs font-medium",
-                          active ? "text-amber-900" : "text-stone-600",
-                        ].join(" ")}
-                      >
-                        {shortName}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* TABLET/DESKTOP: Text Pills */}
-              <div className="hidden gap-2 overflow-x-auto px-4 py-3 scrollbar-hide sm:flex lg:py-4">
-                {categories.map((c) => {
-                  const active = c === activeCat;
-
-                  return (
-                    <button
-                      key={c}
-                      onClick={() => setActiveCat(c)}
-                      className={[
-                        "flex-shrink-0 rounded-full px-4 py-2 text-sm font-medium transition-all",
-                        active
-                          ? "bg-gradient-to-r from-amber-700 to-amber-900 text-white shadow-md"
-                          : "bg-amber-50 text-amber-900 hover:bg-amber-100",
-                      ].join(" ")}
-                    >
-                      {c}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-
-          {/* Promo Banner - Scrolling */}
-          <div className="overflow-hidden border-b border-amber-200 bg-gradient-to-r from-amber-500 to-amber-600">
-            <div className="animate-marquee whitespace-nowrap py-2 text-sm font-medium text-white sm:py-2.5 lg:py-3 lg:text-base">
-              {promoText} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {promoText} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {promoText}
-            </div>
-          </div>
-
-          {/* Added to Cart Toast */}
-          {addedToCartId && (
-            <div className="fixed left-1/2 top-20 z-50 -translate-x-1/2 animate-in slide-in-from-top-5">
-              <div className="flex items-center gap-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-emerald-600 px-4 py-3 text-white shadow-xl">
-                <CheckCircle className="h-5 w-5" />
-                <span className="font-medium">Added to cart!</span>
-              </div>
-            </div>
-          )}
-
-          {/* Error Display */}
-          {loadErr && (
-            <div className="mx-4 mt-3 flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 p-4">
-              <AlertCircle className="h-5 w-5 text-red-500" />
-              <div className="text-sm text-red-700">Failed to load products: {loadErr}</div>
-            </div>
-          )}
-
-          {/* Product Grid - Responsive */}
-          <div className="mx-auto max-w-7xl px-4 py-3 sm:py-4 lg:py-6">
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4 lg:gap-4">
-              {/* Skeleton Loading Cards */}
-              {loading &&
-                Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} className="overflow-hidden rounded-xl border border-stone-100 bg-white p-2 shadow-sm sm:p-2.5 lg:p-3">
-                    <div className="aspect-square animate-shimmer rounded-lg bg-gradient-to-r from-stone-200 via-stone-100 to-stone-200 bg-[length:200%_100%]" />
-                    <div className="mt-1.5 h-3 w-full animate-pulse rounded bg-stone-200 sm:mt-2" />
-                    <div className="mt-1 h-3 w-2/3 animate-pulse rounded bg-stone-200" />
-                    <div className="mt-1 h-3 w-1/2 animate-pulse rounded bg-stone-200" />
-                    <div className="mt-1.5 h-8 w-full animate-pulse rounded-xl bg-stone-200 sm:h-9 lg:h-10" />
-                  </div>
-                ))}
-
-              {/* Actual Product Cards */}
-              {!loading && sortedProducts.map((p) => {
-                const stock = p.stock_qty ?? 0;
-                const out = stock <= 0;
-                const low = !out && stock > 0 && stock <= 5;
-                const justAdded = addedToCartId === p.id;
-
-                return (
+      {/* Category Tabs - Ultra Compact with Emoji */}
+      <div className="sticky top-[48px] z-40 border-b border-stone-100 bg-white">
+        <div className="mx-auto max-w-7xl">
+          <div className="flex gap-1.5 overflow-x-auto px-4 py-1.5 scrollbar-hide">
+            {categories.map((c) => {
+              const active = c === activeCat;
+              const emoji = getCategoryEmoji(c);
+              const shortName = getShortName(c);
+              
+              return (
+                <button
+                  key={c}
+                  onClick={() => setActiveCat(c)}
+                  className="flex flex-shrink-0 flex-col items-center gap-0.5 transition"
+                >
                   <div
-                    key={p.id}
                     className={[
-                      "group relative overflow-hidden rounded-xl border border-stone-100 bg-white p-2 shadow-sm transition-all hover:shadow-md sm:p-2.5 lg:p-3",
-                      out ? "opacity-75" : "",
-                      justAdded ? "ring-2 ring-emerald-500 ring-offset-2" : "",
+                      "flex h-10 w-10 items-center justify-center rounded-full text-base transition",
+                      active
+                        ? "bg-gradient-to-r from-amber-700 to-amber-900 shadow-sm"
+                        : "bg-stone-100 hover:bg-stone-200",
                     ].join(" ")}
                   >
-                    {/* Product Image */}
-                    <div className="relative aspect-square overflow-hidden rounded-lg bg-gradient-to-br from-stone-50 to-white">
-                      {p.photo_url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={p.photo_url}
-                          alt={p.name}
-                          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                          loading="lazy"
-                        />
-                      ) : (
-                        <div className="grid h-full w-full place-items-center text-stone-400">
-                          <Package className="h-8 w-8 opacity-50" />
-                        </div>
-                      )}
-
-                      {/* Stock Badge - Only show when low or out */}
-                      {(out || low) && (
-                        <div
-                          className={[
-                            "absolute right-2 top-2 rounded-lg px-2 py-0.5 text-xs font-semibold shadow-sm",
-                            out
-                              ? "border border-red-200 bg-red-100 text-red-700"
-                              : "border border-amber-200 bg-amber-100 text-amber-800",
-                          ].join(" ")}
-                        >
-                          {out ? "Out" : stock}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Product Info - Responsive */}
-                    <div className="mt-1.5 sm:mt-2">
-                      <h4 className="line-clamp-2 text-xs font-semibold leading-snug text-stone-900 sm:text-sm">
-                        {p.name}
-                      </h4>
-                      <div className="mt-1 text-sm font-bold text-stone-900 sm:text-base lg:text-lg">
-                        {peso(p.price_cents)}
-                      </div>
-                    </div>
-
-                    {/* Add Button - Responsive */}
-                    <button
-                      disabled={out}
-                      onClick={() => add(p)}
-                      className={[
-                        "mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition active:scale-95 sm:mt-2 sm:py-2 sm:text-sm lg:py-2.5",
-                        out
-                          ? "cursor-not-allowed bg-stone-100 text-stone-400"
-                          : "bg-gradient-to-r from-amber-700 to-amber-900 text-white hover:from-amber-800 hover:to-amber-950",
-                      ].join(" ")}
-                    >
-                      {out ? (
-                        "Out"
-                      ) : (
-                        <>
-                          <ShoppingCart className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                          <span className="sm:hidden">Add</span>
-                          <span className="hidden sm:inline">Add to Cart</span>
-                        </>
-                      )}
-                    </button>
+                    <span className={active ? "text-white" : ""}>{emoji}</span>
                   </div>
-                );
-              })}
-            </div>
-
-            {/* Empty State */}
-            {!loading && sortedProducts.length === 0 && (
-              <div className="rounded-2xl border-2 border-dashed border-stone-300 bg-stone-50 p-8 text-center">
-                <Package className="mx-auto h-12 w-12 text-stone-400" />
-                <div className="mt-3 font-medium text-stone-600">No products found</div>
-                <div className="mt-1 text-sm text-stone-500">
-                  {activeCat === ALL ? "Check back later for new items!" : `No products in ${activeCat} category`}
-                </div>
-                {activeCat !== ALL && (
-                  <button
-                    onClick={() => setActiveCat(ALL)}
-                    className="mt-4 rounded-xl bg-gradient-to-r from-amber-700 to-amber-900 px-4 py-2 text-sm font-semibold text-white transition hover:from-amber-800 hover:to-amber-950"
+                  <span
+                    className={[
+                      "text-xs font-medium",
+                      active ? "text-amber-900" : "text-stone-600",
+                    ].join(" ")}
                   >
-                    View All Products
-                  </button>
-                )}
-              </div>
-            )}
+                    {shortName}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
-
-        {/* DESKTOP SIDEBAR CART - Only visible on large screens */}
-        <aside className="hidden lg:block lg:w-[380px] lg:flex-shrink-0">
-          <div className="sticky top-6 rounded-2xl border border-stone-200 bg-white p-6 shadow-lg">
-            {/* Cart Header */}
-            <div className="mb-6 flex items-center gap-3">
-              <ShoppingCart className="h-6 w-6 text-stone-900" />
-              <div>
-                <div className="text-lg font-bold text-stone-900">Your Cart</div>
-                <div className="text-sm text-stone-500">
-                  {cartCount > 0 ? `${cartCount} item${cartCount !== 1 ? "s" : ""}` : "Empty"}
-                </div>
-              </div>
-            </div>
-
-            {/* Cart Items */}
-            <div className="max-h-[calc(100vh-300px)] space-y-3 overflow-auto">
-              {!cart.length ? (
-                <div className="rounded-2xl border-2 border-dashed border-stone-300 bg-stone-50 p-8 text-center">
-                  <ShoppingCart className="mx-auto h-12 w-12 text-stone-400" />
-                  <h4 className="mt-4 font-semibold text-stone-900">Your cart is empty</h4>
-                  <p className="mt-2 text-sm text-stone-500">Add some items to get started</p>
-                </div>
-              ) : (
-                cart.map((i) => (
-                  <div key={i.id} className="flex gap-3 rounded-2xl border border-stone-200 bg-white p-3">
-                    <div className="h-14 w-14 flex-shrink-0 overflow-hidden rounded-xl border border-stone-200 bg-stone-50">
-                      {i.photo_url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={i.photo_url} alt={i.name} className="h-full w-full object-cover" />
-                      ) : (
-                        <div className="grid h-full w-full place-items-center text-stone-400">
-                          <Package className="h-5 w-5" />
-                        </div>
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between">
-                        <div className="truncate">
-                          <div className="truncate font-semibold text-stone-900">{i.name}</div>
-                          <div className="text-xs text-stone-500">{peso(i.price_cents)} each</div>
-                        </div>
-                        <div className="font-bold tabular-nums text-stone-900">{peso(i.qty * i.price_cents)}</div>
-                      </div>
-                      <div className="mt-2 flex items-center gap-2">
-                        <button
-                          onClick={() => setQty(i.id, i.qty - 1)}
-                          className="h-8 w-8 rounded-xl border border-stone-200 text-stone-700 transition hover:bg-stone-50 active:scale-95"
-                        aria-label="Decrease quantity">
-                          −
-                        </button>
-                        <div className="min-w-[32px] text-center font-bold text-stone-900">{i.qty}</div>
-                        <button
-                          onClick={() => setQty(i.id, i.qty + 1)}
-                          className="h-8 w-8 rounded-xl border border-amber-700 bg-amber-700 text-white transition hover:bg-amber-800 active:scale-95"
-                        aria-label="Increase quantity">
-                          +
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
-            {/* Checkout Button */}
-            {cart.length > 0 && (
-              <div className="mt-6 border-t border-stone-200 pt-6">
-                <div className="mb-4 flex justify-between text-sm">
-                  <span className="text-stone-600">Subtotal</span>
-                  <span className="font-bold tabular-nums text-stone-900">{peso(subtotalCents)}</span>
-                </div>
-                <button
-                  onClick={checkout}
-                  className="w-full rounded-2xl bg-gradient-to-r from-amber-700 to-amber-900 px-6 py-4 text-base font-bold text-white shadow-lg transition hover:from-amber-800 hover:to-amber-950 active:scale-[0.98]"
-                >
-                  Checkout Now
-                  <ChevronRight className="ml-2 inline-block h-5 w-5" />
-                </button>
-              </div>
-            )}
-          </div>
-        </aside>
       </div>
 
-      {/* Mobile/Tablet Cart Modal */}
+      {/* Promo Banner - Scrolling Animation */}
+      <div className="overflow-hidden border-b border-amber-200 bg-gradient-to-r from-amber-500 to-amber-600">
+        <div className="animate-marquee whitespace-nowrap py-2 text-sm font-medium text-white">
+          {promoText} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {promoText} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {promoText}
+        </div>
+      </div>
+
+      {/* Added to Cart Toast */}
+      {addedToCartId && (
+        <div className="fixed left-1/2 top-20 z-50 -translate-x-1/2 animate-in slide-in-from-top-5">
+          <div className="flex items-center gap-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-emerald-600 px-4 py-3 text-white shadow-xl">
+            <CheckCircle className="h-5 w-5" />
+            <span className="font-medium">Added to cart!</span>
+          </div>
+        </div>
+      )}
+
+      {/* Error Display */}
+      {loadErr && (
+        <div className="mx-4 mt-3 flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 p-4">
+          <AlertCircle className="h-5 w-5 text-red-500" />
+          <div className="text-sm text-red-700">Failed to load products: {loadErr}</div>
+        </div>
+      )}
+
+      {/* Product Grid - Ultra Tight Spacing */}
+      <div className="mx-auto max-w-7xl px-4 py-3">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          {/* Skeleton Loading Cards */}
+          {loading &&
+            Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="overflow-hidden rounded-xl border border-stone-50 bg-white p-1.5 shadow-md">
+                {/* Skeleton Image with Shimmer */}
+                <div className="aspect-square animate-shimmer rounded-lg bg-gradient-to-r from-stone-200 via-stone-100 to-stone-200 bg-[length:200%_100%]" />
+                {/* Skeleton Name */}
+                <div className="mt-1.5 h-3 w-full animate-pulse rounded bg-stone-200" />
+                <div className="mt-1 h-3 w-2/3 animate-pulse rounded bg-stone-200" />
+                {/* Skeleton Price */}
+                <div className="mt-1 h-3 w-1/2 animate-pulse rounded bg-stone-200" />
+                {/* Skeleton Button */}
+                <div className="mt-1.5 h-8 w-full animate-pulse rounded-xl bg-stone-200" />
+              </div>
+            ))}
+
+          {/* Actual Product Cards */}
+          {!loading && sortedProducts.map((p) => {
+            const stock = p.stock_qty ?? 0;
+            const out = stock <= 0;
+            const low = !out && stock > 0 && stock <= 5;
+            const justAdded = addedToCartId === p.id;
+
+            return (
+              <div
+                key={p.id}
+                className={[
+                  "group relative overflow-hidden rounded-xl border border-stone-50 bg-white p-1.5 shadow-md transition-all hover:shadow-lg",
+                  out ? "opacity-75" : "",
+                  justAdded ? "ring-2 ring-emerald-500 ring-offset-2" : "",
+                ].join(" ")}
+              >
+                {/* Product Image */}
+                <div className="relative aspect-square overflow-hidden rounded-lg bg-gradient-to-br from-stone-50 to-white">
+                  {p.photo_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={p.photo_url}
+                      alt={p.name}
+                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="grid h-full w-full place-items-center text-stone-400">
+                      <Package className="h-8 w-8 opacity-50" />
+                    </div>
+                  )}
+
+                  {/* Stock Badge - Compact */}
+                  {(out || low) && (
+                    <div
+                      className={[
+                        "absolute right-2 top-2 rounded-lg px-2 py-0.5 text-xs font-semibold shadow-sm",
+                        out
+                          ? "border border-red-200 bg-red-100 text-red-700"
+                          : "border border-amber-200 bg-amber-100 text-amber-800",
+                      ].join(" ")}
+                    >
+                      {out ? "Out" : stock}
+                    </div>
+                  )}
+                </div>
+
+                {/* Product Info - Compact */}
+                <div className="mt-1.5">
+                  <h4 className="line-clamp-2 text-xs font-semibold leading-snug text-stone-900">{p.name}</h4>
+                  <div className="mt-1 text-sm font-bold text-stone-900">{peso(p.price_cents)}</div>
+                </div>
+
+                {/* Add Button - UNCHANGED! PERFECT! */}
+                <button
+                  disabled={out}
+                  onClick={() => add(p)}
+                  className={[
+                    "mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition active:scale-95",
+                    out
+                      ? "cursor-not-allowed bg-stone-100 text-stone-400"
+                      : "bg-gradient-to-r from-amber-700 to-amber-900 text-white hover:from-amber-800 hover:to-amber-950",
+                  ].join(" ")}
+                >
+                  {out ? (
+                    "Out"
+                  ) : (
+                    <>
+                      <ShoppingCart className="h-3.5 w-3.5" />
+                      Add
+                    </>
+                  )}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Empty State */}
+        {!loading && sortedProducts.length === 0 && (
+          <div className="rounded-2xl border-2 border-dashed border-stone-300 bg-stone-50 p-8 text-center">
+            <Package className="mx-auto h-12 w-12 text-stone-400" />
+            <div className="mt-3 font-medium text-stone-600">No products found</div>
+            <div className="mt-1 text-sm text-stone-500">
+              {activeCat === ALL ? "Check back later for new items!" : `No products in ${activeCat} category`}
+            </div>
+            {activeCat !== ALL && (
+              <button
+                onClick={() => setActiveCat(ALL)}
+                className="mt-4 rounded-xl bg-gradient-to-r from-amber-700 to-amber-900 px-4 py-2 text-sm font-semibold text-white transition hover:from-amber-800 hover:to-amber-950"
+              >
+                View All Products
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Mobile Cart Overlay */}
       {showCartDetails && (
-        <div className="fixed inset-0 z-50 lg:hidden">
+        <div className="fixed inset-0 z-50">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowCartDetails(false)} />
           <div className="absolute bottom-0 left-0 right-0 max-h-[85vh] overflow-hidden rounded-t-3xl bg-white shadow-2xl">
             <div className="p-6">
@@ -626,9 +514,7 @@ export default function Storefront({
                   </div>
                 </div>
                 <button
-                  type="button"
                   onClick={() => setShowCartDetails(false)}
-                  aria-label="Close cart"
                   className="rounded-full p-2 transition hover:bg-stone-100 active:scale-95"
                 >
                   <X className="h-5 w-5" />
@@ -668,14 +554,14 @@ export default function Storefront({
                           <button
                             onClick={() => setQty(i.id, i.qty - 1)}
                             className="h-8 w-8 rounded-xl border border-stone-200 text-stone-700 transition hover:bg-stone-50 active:scale-95"
-                          aria-label="Decrease quantity">
+                          >
                             −
                           </button>
                           <div className="min-w-[32px] text-center font-bold text-stone-900">{i.qty}</div>
                           <button
                             onClick={() => setQty(i.id, i.qty + 1)}
                             className="h-8 w-8 rounded-xl border border-amber-700 bg-amber-700 text-white transition hover:bg-amber-800 active:scale-95"
-                          aria-label="Increase quantity">
+                          >
                             +
                           </button>
                         </div>
@@ -706,8 +592,8 @@ export default function Storefront({
         </div>
       )}
 
-      {/* Sticky Cart Button - Hidden on Desktop */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-stone-200 bg-white/95 p-4 backdrop-blur-sm lg:hidden">
+      {/* Sticky Cart Button */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-stone-200 bg-white/95 p-4 backdrop-blur-sm">
         <div className="mx-auto max-w-7xl">
           <button
             onClick={() => setShowCartDetails(true)}
@@ -740,29 +626,29 @@ export default function Storefront({
           0% { background-position: -200% 0; }
           100% { background-position: 200% 0; }
         }
-
+        
         .animate-shimmer {
           animation: shimmer 1.5s infinite linear;
         }
-
+        
         @keyframes marquee {
           0% { transform: translateX(0); }
           100% { transform: translateX(-33.333%); }
         }
-
+        
         .animate-marquee {
           animation: marquee 20s linear infinite;
         }
-
+        
         .scrollbar-hide::-webkit-scrollbar {
           display: none;
         }
-
+        
         .scrollbar-hide {
           -ms-overflow-style: none;
           scrollbar-width: none;
         }
-
+        
         .touch-target {
           min-height: 44px;
           min-width: 44px;
