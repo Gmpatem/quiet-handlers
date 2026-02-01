@@ -9,9 +9,6 @@ import {
   X,
   CheckCircle,
   AlertCircle,
-  Menu,
-  Settings,
-  Printer,
 } from "lucide-react";
 
 type Product = {
@@ -45,6 +42,27 @@ function normalizeCategory(c?: string | null) {
   return v || "Other";
 }
 
+// Category emoji mapping
+function getCategoryEmoji(category: string): string {
+  const cat = category.toLowerCase();
+  if (cat === "all") return "📦";
+  if (cat.includes("biscuit") || cat.includes("cookie")) return "🍪";
+  if (cat.includes("coffee") || cat.includes("kape")) return "☕";
+  if (cat.includes("drink") || cat.includes("beverage")) return "🥤";
+  if (cat.includes("can") || cat.includes("canned")) return "🥫";
+  if (cat.includes("noodle") || cat.includes("pasta")) return "🍜";
+  if (cat.includes("chip") || cat.includes("snack")) return "🍟";
+  if (cat.includes("juice")) return "🧃";
+  return "🍱";
+}
+
+// Get short category name for mobile
+function getShortName(category: string): string {
+  if (category === ALL) return "All";
+  if (category.length <= 3) return category;
+  return category.substring(0, 3);
+}
+
 export default function Storefront({
   settings,
   products: initialProducts,
@@ -59,7 +77,6 @@ export default function Storefront({
   const [cart, setCart] = useState<CartItem[]>([]);
   const [showCartDetails, setShowCartDetails] = useState(false);
   const [addedToCartId, setAddedToCartId] = useState<string | null>(null);
-  const [showMenu, setShowMenu] = useState(false);
 
   // Pull-to-refresh state
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -93,7 +110,7 @@ export default function Storefront({
       ];
     });
     setAddedToCartId(p.id);
-    setTimeout(() => setAddedToCartId(null), 1500);
+    setTimeout(() => setAddedToCartId(null), 2000);
   }
 
   function setQty(id: string, qty: number) {
@@ -125,19 +142,14 @@ export default function Storefront({
 
   useEffect(() => {
     const all = cache[ALL] ?? [];
-    const categoriesWithStock = new Map<string, number>();
+    const counts = new Map<string, number>();
 
-    // Only count categories that have at least one product with stock > 0
     for (const p of all) {
       const cat = normalizeCategory(p.category);
-      const hasStock = (p.stock_qty ?? 0) > 0;
-      
-      if (hasStock) {
-        categoriesWithStock.set(cat, (categoriesWithStock.get(cat) ?? 0) + 1);
-      }
+      counts.set(cat, (counts.get(cat) ?? 0) + 1);
     }
 
-    let arr = Array.from(categoriesWithStock.entries())
+    let arr = Array.from(counts.entries())
       .filter(([, n]) => n > 0)
       .map(([c]) => c);
 
@@ -271,98 +283,19 @@ export default function Storefront({
     }
   };
 
-  const promoText = settings?.promo_text || "🎉 Flash Sale! 20% off all drinks this weekend!";
+  const promoText = settings?.promo_text || "sweet deals coming soon !!";
 
   return (
     <div
-      className="min-h-screen pb-24 lg:pb-0"
+      className="min-h-screen bg-gradient-to-b from-stone-50 to-white pb-24 lg:pb-0"
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      {/* Premium Header - Full Width, Edge-to-Edge */}
-      <header className="sticky top-0 z-50 bg-gradient-to-br from-amber-700 to-amber-900 shadow-xl">
-        {/* Inner Content with Padding */}
-        <div className="px-4 py-4">
-          {/* Row 1: Logo + Branding + Hamburger */}
-          <div className="mb-3 flex items-center justify-between gap-3">
-            {/* Logo + Name + Tagline */}
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-900 to-amber-950 text-sm font-bold text-white shadow-md">
-                FDS
-              </div>
-              <div className="flex-1">
-                <h1 className="text-base font-bold leading-tight text-white">Final Destination Services</h1>
-                <p className="text-xs font-light text-white/90">Handling things. Quietly</p>
-              </div>
-            </div>
-
-            {/* Hamburger Menu */}
-            <button
-              onClick={() => setShowMenu(true)}
-              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-white/30 bg-white/20 text-white backdrop-blur-md transition-all hover:bg-white/30 active:scale-95"
-              aria-label="Open menu"
-            >
-              <Menu className="h-5 w-5" />
-            </button>
-          </div>
-
-          {/* Row 2: Service Pills (White, NOT Full Width) */}
-          <div className="scrollbar-hide mb-3 flex gap-3 overflow-x-auto pb-1">
-            {/* Printing Service - Active */}
-            <a
-              href="https://forms.gle/KBhZ8Et4fqdG7g5y5"
-              target="_blank"
-              rel="noreferrer"
-              className="flex flex-shrink-0 items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-amber-800 shadow-md transition-all hover:-translate-y-0.5 hover:shadow-lg active:scale-95"
-            >
-              <Printer className="h-4 w-4" />
-              Printing Service
-            </a>
-
-            {/* GCash Service - Coming Soon */}
-            <div className="flex flex-shrink-0 items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-amber-800 opacity-75 shadow-md">
-              <span className="text-base">💰</span>
-              <span>GCash Service</span>
-              <span className="ml-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-800">
-                SOON
-              </span>
-            </div>
-
-            {/* Easy to add more services here */}
-          </div>
-
-          {/* Row 3: Category Pills (Glassmorphism) */}
-          <div className="scrollbar-hide flex gap-3 overflow-x-auto pb-1">
-            {categories.map((c) => {
-              const active = c === activeCat;
-
-              return (
-                <button
-                  key={c}
-                  onClick={() => setActiveCat(c)}
-                  className={[
-                    "flex-shrink-0 whitespace-nowrap rounded-full px-5 py-2.5 text-sm font-semibold transition-all",
-                    active
-                      ? "bg-white text-amber-800 shadow-md"
-                      : "border border-white/30 bg-white/20 text-white backdrop-blur-md hover:bg-white/30",
-                  ].join(" ")}
-                >
-                  {c}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Subtle Gradient Fade Divider */}
-        <div className="h-px bg-gradient-to-r from-transparent via-amber-800/30 to-transparent" />
-      </header>
-
       {/* Pull-to-Refresh Indicator */}
       {(pullDistance > 0 || isRefreshing) && (
         <div
-          className="fixed left-0 right-0 top-0 z-30 flex items-center justify-center bg-white/95 backdrop-blur-sm transition-all"
+          className="fixed left-0 right-0 top-[52px] z-30 flex items-center justify-center bg-white/95 backdrop-blur-sm transition-all sm:top-[64px] lg:top-[80px]"
           style={{ height: `${pullDistance}px`, opacity: pullDistance / 60 }}
         >
           <div className="text-center">
@@ -380,52 +313,74 @@ export default function Storefront({
         </div>
       )}
 
-      {/* Hamburger Menu - Slide-in Panel */}
-      {showMenu && (
-        <>
-          <div
-            className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm"
-            onClick={() => setShowMenu(false)}
-          />
-          <div className="fixed right-0 top-0 z-[70] h-full w-[280px] animate-in slide-in-from-right bg-white shadow-2xl">
-            <div className="p-6">
-              <button
-                onClick={() => setShowMenu(false)}
-                className="mb-6 flex h-10 w-10 items-center justify-center rounded-xl bg-stone-100 text-stone-600 transition-all hover:bg-stone-200 active:scale-95"
-                aria-label="Close menu"
-              >
-                <X className="h-5 w-5" />
-              </button>
+      {/* Desktop Layout with Sidebar */}
+      <div className="mx-auto max-w-[1600px] lg:flex lg:gap-6 lg:px-6 lg:py-6">
+        {/* Main Content */}
+        <div className="flex-1">
+          {/* Category Tabs - Responsive */}
+          <div className="sticky top-[52px] z-40 border-b border-stone-100 bg-white sm:top-[64px] lg:top-0 lg:rounded-t-2xl">
+            <div className="mx-auto max-w-7xl">
+              {/* MOBILE: Icon Circles */}
+              <div className="flex gap-1.5 overflow-x-auto px-4 py-2 scrollbar-hide sm:hidden">
+                {categories.map((c) => {
+                  const active = c === activeCat;
+                  const emoji = getCategoryEmoji(c);
+                  const shortName = getShortName(c);
 
-              <div className="space-y-3">
-                <a
-                  href="/admin"
-                  className="flex items-center gap-3 rounded-xl bg-stone-50 px-4 py-3 text-stone-900 transition-all hover:bg-amber-50 active:scale-95"
-                  onClick={() => setShowMenu(false)}
-                >
-                  <Settings className="h-5 w-5 text-amber-700" />
-                  <span className="font-medium">Admin Panel</span>
-                </a>
+                  return (
+                    <button
+                      key={c}
+                      onClick={() => setActiveCat(c)}
+                      className="flex flex-shrink-0 flex-col items-center gap-0.5 transition"
+                    >
+                      <div
+                        className={[
+                          "flex h-10 w-10 items-center justify-center rounded-full text-base transition",
+                          active
+                            ? "bg-gradient-to-r from-amber-700 to-amber-900 shadow-sm"
+                            : "bg-amber-50 hover:bg-amber-100",
+                        ].join(" ")}
+                      >
+                        <span className={active ? "text-white" : ""}>{emoji}</span>
+                      </div>
+                      <span
+                        className={[
+                          "text-xs font-medium",
+                          active ? "text-amber-900" : "text-stone-600",
+                        ].join(" ")}
+                      >
+                        {shortName}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
 
-                <div className="flex items-center gap-3 rounded-xl bg-stone-50 px-4 py-3 text-stone-400">
-                  <div className="flex h-5 w-5 items-center justify-center text-lg">💰</div>
-                  <div className="flex-1">
-                    <span className="font-medium">GCash Service</span>
-                  </div>
-                  <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">
-                    SOON
-                  </span>
-                </div>
+              {/* TABLET/DESKTOP: Text Pills */}
+              <div className="hidden gap-2 overflow-x-auto px-4 py-3 scrollbar-hide sm:flex lg:py-4">
+                {categories.map((c) => {
+                  const active = c === activeCat;
+
+                  return (
+                    <button
+                      key={c}
+                      onClick={() => setActiveCat(c)}
+                      className={[
+                        "flex-shrink-0 rounded-full px-4 py-2 text-sm font-medium transition-all",
+                        active
+                          ? "bg-gradient-to-r from-amber-700 to-amber-900 text-white shadow-md"
+                          : "bg-amber-50 text-amber-900 hover:bg-amber-100",
+                      ].join(" ")}
+                    >
+                      {c}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
-        </>
-      )}
 
-      {/* Desktop Layout with Sidebar */}
-      <div className="mx-auto max-w-[1600px] lg:flex lg:gap-6 lg:px-6 lg:py-6">
-        <div className="flex-1">
-          {/* Promo Banner */}
+          {/* Promo Banner - Scrolling */}
           <div className="overflow-hidden border-b border-amber-200 bg-gradient-to-r from-amber-500 to-amber-600">
             <div className="animate-marquee whitespace-nowrap py-2 text-sm font-medium text-white sm:py-2.5 lg:py-3 lg:text-base">
               {promoText} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {promoText} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {promoText}
@@ -435,7 +390,7 @@ export default function Storefront({
           {/* Added to Cart Toast */}
           {addedToCartId && (
             <div className="fixed left-1/2 top-20 z-50 -translate-x-1/2 animate-in slide-in-from-top-5">
-              <div className="flex items-center gap-3 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 px-4 py-3 text-white shadow-xl">
+              <div className="flex items-center gap-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-emerald-600 px-4 py-3 text-white shadow-xl">
                 <CheckCircle className="h-5 w-5" />
                 <span className="font-medium">Added to cart!</span>
               </div>
@@ -444,19 +399,20 @@ export default function Storefront({
 
           {/* Error Display */}
           {loadErr && (
-            <div className="mx-4 mt-3 flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 p-4">
+            <div className="mx-4 mt-3 flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 p-4">
               <AlertCircle className="h-5 w-5 text-red-500" />
               <div className="text-sm text-red-700">Failed to load products: {loadErr}</div>
             </div>
           )}
 
-          {/* Product Grid */}
+          {/* Product Grid - Responsive */}
           <div className="mx-auto max-w-7xl px-4 py-3 sm:py-4 lg:py-6">
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4 lg:gap-4">
+              {/* Skeleton Loading Cards */}
               {loading &&
                 Array.from({ length: 6 }).map((_, i) => (
                   <div key={i} className="overflow-hidden rounded-xl border border-stone-100 bg-white p-2 shadow-sm sm:p-2.5 lg:p-3">
-                    <div className="aspect-square animate-shimmer rounded-xl bg-gradient-to-r from-stone-200 via-stone-100 to-stone-200 bg-[length:200%_100%]" />
+                    <div className="aspect-square animate-shimmer rounded-lg bg-gradient-to-r from-stone-200 via-stone-100 to-stone-200 bg-[length:200%_100%]" />
                     <div className="mt-1.5 h-3 w-full animate-pulse rounded bg-stone-200 sm:mt-2" />
                     <div className="mt-1 h-3 w-2/3 animate-pulse rounded bg-stone-200" />
                     <div className="mt-1 h-3 w-1/2 animate-pulse rounded bg-stone-200" />
@@ -464,6 +420,7 @@ export default function Storefront({
                   </div>
                 ))}
 
+              {/* Actual Product Cards */}
               {!loading && sortedProducts.map((p) => {
                 const stock = p.stock_qty ?? 0;
                 const out = stock <= 0;
@@ -474,12 +431,13 @@ export default function Storefront({
                   <div
                     key={p.id}
                     className={[
-                      "group relative overflow-hidden rounded-xl border border-stone-100 bg-white p-2 shadow-sm transition-all duration-300 sm:p-2.5 lg:p-3",
-                      out ? "opacity-75" : "hover:-translate-y-1 hover:shadow-lg",
+                      "group relative overflow-hidden rounded-xl border border-stone-100 bg-white p-2 shadow-sm transition-all hover:shadow-md sm:p-2.5 lg:p-3",
+                      out ? "opacity-75" : "",
                       justAdded ? "ring-2 ring-emerald-500 ring-offset-2" : "",
                     ].join(" ")}
                   >
-                    <div className="relative aspect-square overflow-hidden rounded-xl bg-gradient-to-br from-stone-50 to-white">
+                    {/* Product Image */}
+                    <div className="relative aspect-square overflow-hidden rounded-lg bg-gradient-to-br from-stone-50 to-white">
                       {p.photo_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -494,6 +452,7 @@ export default function Storefront({
                         </div>
                       )}
 
+                      {/* Stock Badge - Only show when low or out */}
                       {(out || low) && (
                         <div
                           className={[
@@ -508,6 +467,7 @@ export default function Storefront({
                       )}
                     </div>
 
+                    {/* Product Info - Responsive */}
                     <div className="mt-1.5 sm:mt-2">
                       <h4 className="line-clamp-2 text-xs font-semibold leading-snug text-stone-900 sm:text-sm">
                         {p.name}
@@ -517,26 +477,19 @@ export default function Storefront({
                       </div>
                     </div>
 
+                    {/* Add Button - Responsive */}
                     <button
                       disabled={out}
                       onClick={() => add(p)}
                       className={[
-                        "mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all duration-300 active:scale-95 sm:mt-2 sm:py-2 sm:text-sm lg:py-2.5",
+                        "mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition active:scale-95 sm:mt-2 sm:py-2 sm:text-sm lg:py-2.5",
                         out
                           ? "cursor-not-allowed bg-stone-100 text-stone-400"
-                          : justAdded
-                          ? "bg-gradient-to-r from-emerald-500 to-emerald-600 text-white"
                           : "bg-gradient-to-r from-amber-700 to-amber-900 text-white hover:from-amber-800 hover:to-amber-950",
                       ].join(" ")}
                     >
                       {out ? (
                         "Out"
-                      ) : justAdded ? (
-                        <>
-                          <CheckCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                          <span className="sm:hidden">Added</span>
-                          <span className="hidden sm:inline">Added to Cart</span>
-                        </>
                       ) : (
                         <>
                           <ShoppingCart className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
@@ -550,8 +503,9 @@ export default function Storefront({
               })}
             </div>
 
+            {/* Empty State */}
             {!loading && sortedProducts.length === 0 && (
-              <div className="rounded-xl border-2 border-dashed border-stone-300 bg-stone-50 p-8 text-center">
+              <div className="rounded-2xl border-2 border-dashed border-stone-300 bg-stone-50 p-8 text-center">
                 <Package className="mx-auto h-12 w-12 text-stone-400" />
                 <div className="mt-3 font-medium text-stone-600">No products found</div>
                 <div className="mt-1 text-sm text-stone-500">
@@ -570,9 +524,10 @@ export default function Storefront({
           </div>
         </div>
 
-        {/* Desktop Sidebar Cart */}
+        {/* DESKTOP SIDEBAR CART - Only visible on large screens */}
         <aside className="hidden lg:block lg:w-[380px] lg:flex-shrink-0">
-          <div className="sticky top-6 rounded-xl border border-stone-200 bg-white p-6 shadow-lg">
+          <div className="sticky top-6 rounded-2xl border border-stone-200 bg-white p-6 shadow-lg">
+            {/* Cart Header */}
             <div className="mb-6 flex items-center gap-3">
               <ShoppingCart className="h-6 w-6 text-stone-900" />
               <div>
@@ -583,16 +538,17 @@ export default function Storefront({
               </div>
             </div>
 
+            {/* Cart Items */}
             <div className="max-h-[calc(100vh-300px)] space-y-3 overflow-auto">
               {!cart.length ? (
-                <div className="rounded-xl border-2 border-dashed border-stone-300 bg-stone-50 p-8 text-center">
+                <div className="rounded-2xl border-2 border-dashed border-stone-300 bg-stone-50 p-8 text-center">
                   <ShoppingCart className="mx-auto h-12 w-12 text-stone-400" />
                   <h4 className="mt-4 font-semibold text-stone-900">Your cart is empty</h4>
                   <p className="mt-2 text-sm text-stone-500">Add some items to get started</p>
                 </div>
               ) : (
                 cart.map((i) => (
-                  <div key={i.id} className="flex gap-3 rounded-xl border border-stone-200 bg-white p-3">
+                  <div key={i.id} className="flex gap-3 rounded-2xl border border-stone-200 bg-white p-3">
                     <div className="h-14 w-14 flex-shrink-0 overflow-hidden rounded-xl border border-stone-200 bg-stone-50">
                       {i.photo_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
@@ -615,16 +571,14 @@ export default function Storefront({
                         <button
                           onClick={() => setQty(i.id, i.qty - 1)}
                           className="h-8 w-8 rounded-xl border border-stone-200 text-stone-700 transition hover:bg-stone-50 active:scale-95"
-                          aria-label="Decrease quantity"
-                        >
+                        aria-label="Decrease quantity">
                           −
                         </button>
                         <div className="min-w-[32px] text-center font-bold text-stone-900">{i.qty}</div>
                         <button
                           onClick={() => setQty(i.id, i.qty + 1)}
                           className="h-8 w-8 rounded-xl border border-amber-700 bg-amber-700 text-white transition hover:bg-amber-800 active:scale-95"
-                          aria-label="Increase quantity"
-                        >
+                        aria-label="Increase quantity">
                           +
                         </button>
                       </div>
@@ -634,6 +588,7 @@ export default function Storefront({
               )}
             </div>
 
+            {/* Checkout Button */}
             {cart.length > 0 && (
               <div className="mt-6 border-t border-stone-200 pt-6">
                 <div className="mb-4 flex justify-between text-sm">
@@ -642,7 +597,7 @@ export default function Storefront({
                 </div>
                 <button
                   onClick={checkout}
-                  className="w-full rounded-xl bg-gradient-to-r from-amber-700 to-amber-900 px-6 py-4 text-base font-bold text-white shadow-lg transition hover:from-amber-800 hover:to-amber-950 active:scale-[0.98]"
+                  className="w-full rounded-2xl bg-gradient-to-r from-amber-700 to-amber-900 px-6 py-4 text-base font-bold text-white shadow-lg transition hover:from-amber-800 hover:to-amber-950 active:scale-[0.98]"
                 >
                   Checkout Now
                   <ChevronRight className="ml-2 inline-block h-5 w-5" />
@@ -653,12 +608,13 @@ export default function Storefront({
         </aside>
       </div>
 
-      {/* Mobile Cart Modal */}
+      {/* Mobile/Tablet Cart Modal */}
       {showCartDetails && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowCartDetails(false)} />
           <div className="absolute bottom-0 left-0 right-0 max-h-[85vh] overflow-hidden rounded-t-3xl bg-white shadow-2xl">
             <div className="p-6">
+              {/* Cart Header */}
               <div className="mb-6 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <ShoppingCart className="h-6 w-6 text-stone-900" />
@@ -670,23 +626,26 @@ export default function Storefront({
                   </div>
                 </div>
                 <button
+                  type="button"
                   onClick={() => setShowCartDetails(false)}
+                  aria-label="Close cart"
                   className="rounded-full p-2 transition hover:bg-stone-100 active:scale-95"
                 >
                   <X className="h-5 w-5" />
                 </button>
               </div>
 
+              {/* Cart Items */}
               <div className="max-h-[55vh] space-y-3 overflow-auto">
                 {!cart.length ? (
-                  <div className="rounded-xl border-2 border-dashed border-stone-300 bg-stone-50 p-8 text-center">
+                  <div className="rounded-2xl border-2 border-dashed border-stone-300 bg-stone-50 p-8 text-center">
                     <ShoppingCart className="mx-auto h-12 w-12 text-stone-400" />
                     <h4 className="mt-4 font-semibold text-stone-900">Your cart is empty</h4>
                     <p className="mt-2 text-sm text-stone-500">Add some items to get started</p>
                   </div>
                 ) : (
                   cart.map((i) => (
-                    <div key={i.id} className="flex gap-3 rounded-xl border border-stone-200 bg-white p-3">
+                    <div key={i.id} className="flex gap-3 rounded-2xl border border-stone-200 bg-white p-3">
                       <div className="h-14 w-14 flex-shrink-0 overflow-hidden rounded-xl border border-stone-200 bg-stone-50">
                         {i.photo_url ? (
                           // eslint-disable-next-line @next/next/no-img-element
@@ -709,16 +668,14 @@ export default function Storefront({
                           <button
                             onClick={() => setQty(i.id, i.qty - 1)}
                             className="h-8 w-8 rounded-xl border border-stone-200 text-stone-700 transition hover:bg-stone-50 active:scale-95"
-                            aria-label="Decrease quantity"
-                          >
+                          aria-label="Decrease quantity">
                             −
                           </button>
                           <div className="min-w-[32px] text-center font-bold text-stone-900">{i.qty}</div>
                           <button
                             onClick={() => setQty(i.id, i.qty + 1)}
                             className="h-8 w-8 rounded-xl border border-amber-700 bg-amber-700 text-white transition hover:bg-amber-800 active:scale-95"
-                            aria-label="Increase quantity"
-                          >
+                          aria-label="Increase quantity">
                             +
                           </button>
                         </div>
@@ -728,6 +685,7 @@ export default function Storefront({
                 )}
               </div>
 
+              {/* Checkout Button */}
               {cart.length > 0 && (
                 <div className="mt-6 border-t border-stone-200 pt-6">
                   <div className="mb-4 flex justify-between text-sm">
@@ -736,7 +694,7 @@ export default function Storefront({
                   </div>
                   <button
                     onClick={checkout}
-                    className="w-full rounded-xl bg-gradient-to-r from-amber-700 to-amber-900 px-6 py-4 text-base font-bold text-white shadow-lg transition hover:from-amber-800 hover:to-amber-950 active:scale-[0.98]"
+                    className="w-full rounded-2xl bg-gradient-to-r from-amber-700 to-amber-900 px-6 py-4 text-base font-bold text-white shadow-lg transition hover:from-amber-800 hover:to-amber-950 active:scale-[0.98]"
                   >
                     Checkout Now
                     <ChevronRight className="ml-2 inline-block h-5 w-5" />
@@ -748,33 +706,35 @@ export default function Storefront({
         </div>
       )}
 
-      {/* Floating Cart Button - NO BORDER! */}
-      <div className="fixed bottom-4 left-4 right-4 z-40 lg:hidden">
-        <button
-          onClick={() => setShowCartDetails(true)}
-          className="flex w-full items-center justify-between rounded-2xl bg-gradient-to-r from-stone-600 to-amber-900 px-5 py-3.5 text-white shadow-2xl transition-all hover:shadow-3xl active:scale-[0.98]"
-        >
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <ShoppingCart className="h-5 w-5" />
-              {cartCount > 0 && (
-                <div className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-white text-xs font-bold text-amber-900">
-                  {cartCount}
+      {/* Sticky Cart Button - Hidden on Desktop */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-stone-200 bg-white/95 p-4 backdrop-blur-sm lg:hidden">
+        <div className="mx-auto max-w-7xl">
+          <button
+            onClick={() => setShowCartDetails(true)}
+            className="flex w-full items-center justify-between rounded-2xl bg-gradient-to-r from-stone-600 to-amber-900 px-5 py-3.5 text-white shadow-lg transition hover:shadow-xl active:scale-[0.98]"
+          >
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <ShoppingCart className="h-5 w-5" />
+                {cartCount > 0 && (
+                  <div className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-white text-xs font-bold text-amber-900">
+                    {cartCount}
+                  </div>
+                )}
+              </div>
+              <div className="text-left">
+                <div className="text-sm font-semibold">Cart</div>
+                <div className="text-xs opacity-90">
+                  {cartCount > 0 ? `${cartCount} item${cartCount !== 1 ? "s" : ""}` : "Empty"}
                 </div>
-              )}
-            </div>
-            <div className="text-left">
-              <div className="text-sm font-semibold">Cart</div>
-              <div className="text-xs opacity-90">
-                {cartCount > 0 ? `${cartCount} item${cartCount !== 1 ? "s" : ""}` : "Empty"}
               </div>
             </div>
-          </div>
-          <div className="text-lg font-bold tabular-nums">{peso(subtotalCents)}</div>
-        </button>
+            <div className="text-lg font-bold tabular-nums">{peso(subtotalCents)}</div>
+          </button>
+        </div>
       </div>
 
-      {/* Animations */}
+      {/* Custom Animations */}
       <style jsx global>{`
         @keyframes shimmer {
           0% { background-position: -200% 0; }
@@ -801,6 +761,11 @@ export default function Storefront({
         .scrollbar-hide {
           -ms-overflow-style: none;
           scrollbar-width: none;
+        }
+
+        .touch-target {
+          min-height: 44px;
+          min-width: 44px;
         }
       `}</style>
     </div>

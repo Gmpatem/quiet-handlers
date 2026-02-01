@@ -125,19 +125,14 @@ export default function Storefront({
 
   useEffect(() => {
     const all = cache[ALL] ?? [];
-    const categoriesWithStock = new Map<string, number>();
+    const counts = new Map<string, number>();
 
-    // Only count categories that have at least one product with stock > 0
     for (const p of all) {
       const cat = normalizeCategory(p.category);
-      const hasStock = (p.stock_qty ?? 0) > 0;
-      
-      if (hasStock) {
-        categoriesWithStock.set(cat, (categoriesWithStock.get(cat) ?? 0) + 1);
-      }
+      counts.set(cat, (counts.get(cat) ?? 0) + 1);
     }
 
-    let arr = Array.from(categoriesWithStock.entries())
+    let arr = Array.from(counts.entries())
       .filter(([, n]) => n > 0)
       .map(([c]) => c);
 
@@ -280,24 +275,26 @@ export default function Storefront({
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      {/* Premium Header - Full Width, Edge-to-Edge */}
-      <header className="sticky top-0 z-50 bg-gradient-to-br from-amber-700 to-amber-900 shadow-xl">
-        {/* Inner Content with Padding */}
+      {/* Enhanced Header with Glassmorphism */}
+      <header className="sticky top-0 z-50 bg-gradient-to-br from-amber-700 to-amber-900 shadow-lg">
         <div className="px-4 py-4">
-          {/* Row 1: Logo + Branding + Hamburger */}
+          {/* Top Row: Logo + Name + Tagline + Hamburger */}
           <div className="mb-3 flex items-center justify-between gap-3">
-            {/* Logo + Name + Tagline */}
+            {/* Logo + Branding */}
             <div className="flex items-center gap-3">
+              {/* Logo Badge */}
               <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-900 to-amber-950 text-sm font-bold text-white shadow-md">
                 FDS
               </div>
+
+              {/* Name + Tagline */}
               <div className="flex-1">
                 <h1 className="text-base font-bold leading-tight text-white">Final Destination Services</h1>
                 <p className="text-xs font-light text-white/90">Handling things. Quietly</p>
               </div>
             </div>
 
-            {/* Hamburger Menu */}
+            {/* Hamburger Menu Button - Glassmorphism */}
             <button
               onClick={() => setShowMenu(true)}
               className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-white/30 bg-white/20 text-white backdrop-blur-md transition-all hover:bg-white/30 active:scale-95"
@@ -307,33 +304,19 @@ export default function Storefront({
             </button>
           </div>
 
-          {/* Row 2: Service Pills (White, NOT Full Width) */}
-          <div className="scrollbar-hide mb-3 flex gap-3 overflow-x-auto pb-1">
-            {/* Printing Service - Active */}
-            <a
-              href="https://forms.gle/KBhZ8Et4fqdG7g5y5"
-              target="_blank"
-              rel="noreferrer"
-              className="flex flex-shrink-0 items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-amber-800 shadow-md transition-all hover:-translate-y-0.5 hover:shadow-lg active:scale-95"
-            >
-              <Printer className="h-4 w-4" />
-              Printing Service
-            </a>
+          {/* Primary Action Button */}
+          <a
+            href="https://forms.gle/KBhZ8Et4fqdG7g5y5"
+            target="_blank"
+            rel="noreferrer"
+            className="mb-3 flex w-full items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 font-semibold text-amber-800 shadow-md transition-all hover:-translate-y-0.5 hover:shadow-lg active:scale-95"
+          >
+            <Printer className="h-4 w-4" />
+            Printing Service
+          </a>
 
-            {/* GCash Service - Coming Soon */}
-            <div className="flex flex-shrink-0 items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-amber-800 opacity-75 shadow-md">
-              <span className="text-base">💰</span>
-              <span>GCash Service</span>
-              <span className="ml-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-800">
-                SOON
-              </span>
-            </div>
-
-            {/* Easy to add more services here */}
-          </div>
-
-          {/* Row 3: Category Pills (Glassmorphism) */}
-          <div className="scrollbar-hide flex gap-3 overflow-x-auto pb-1">
+          {/* Category Tabs - Glassmorphism Inside Header */}
+          <div className="scrollbar-hide -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
             {categories.map((c) => {
               const active = c === activeCat;
 
@@ -342,7 +325,7 @@ export default function Storefront({
                   key={c}
                   onClick={() => setActiveCat(c)}
                   className={[
-                    "flex-shrink-0 whitespace-nowrap rounded-full px-5 py-2.5 text-sm font-semibold transition-all",
+                    "flex-shrink-0 whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold transition-all",
                     active
                       ? "bg-white text-amber-800 shadow-md"
                       : "border border-white/30 bg-white/20 text-white backdrop-blur-md hover:bg-white/30",
@@ -354,9 +337,6 @@ export default function Storefront({
             })}
           </div>
         </div>
-
-        {/* Subtle Gradient Fade Divider */}
-        <div className="h-px bg-gradient-to-r from-transparent via-amber-800/30 to-transparent" />
       </header>
 
       {/* Pull-to-Refresh Indicator */}
@@ -383,12 +363,16 @@ export default function Storefront({
       {/* Hamburger Menu - Slide-in Panel */}
       {showMenu && (
         <>
+          {/* Overlay */}
           <div
             className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm"
             onClick={() => setShowMenu(false)}
           />
+
+          {/* Menu Panel */}
           <div className="fixed right-0 top-0 z-[70] h-full w-[280px] animate-in slide-in-from-right bg-white shadow-2xl">
             <div className="p-6">
+              {/* Close Button */}
               <button
                 onClick={() => setShowMenu(false)}
                 className="mb-6 flex h-10 w-10 items-center justify-center rounded-xl bg-stone-100 text-stone-600 transition-all hover:bg-stone-200 active:scale-95"
@@ -397,7 +381,9 @@ export default function Storefront({
                 <X className="h-5 w-5" />
               </button>
 
+              {/* Menu Items */}
               <div className="space-y-3">
+                {/* Admin Panel */}
                 <a
                   href="/admin"
                   className="flex items-center gap-3 rounded-xl bg-stone-50 px-4 py-3 text-stone-900 transition-all hover:bg-amber-50 active:scale-95"
@@ -407,6 +393,7 @@ export default function Storefront({
                   <span className="font-medium">Admin Panel</span>
                 </a>
 
+                {/* GCash Service - Coming Soon */}
                 <div className="flex items-center gap-3 rounded-xl bg-stone-50 px-4 py-3 text-stone-400">
                   <div className="flex h-5 w-5 items-center justify-center text-lg">💰</div>
                   <div className="flex-1">
@@ -424,8 +411,9 @@ export default function Storefront({
 
       {/* Desktop Layout with Sidebar */}
       <div className="mx-auto max-w-[1600px] lg:flex lg:gap-6 lg:px-6 lg:py-6">
+        {/* Main Content */}
         <div className="flex-1">
-          {/* Promo Banner */}
+          {/* Promo Banner - Scrolling */}
           <div className="overflow-hidden border-b border-amber-200 bg-gradient-to-r from-amber-500 to-amber-600">
             <div className="animate-marquee whitespace-nowrap py-2 text-sm font-medium text-white sm:py-2.5 lg:py-3 lg:text-base">
               {promoText} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {promoText} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {promoText}
@@ -450,9 +438,10 @@ export default function Storefront({
             </div>
           )}
 
-          {/* Product Grid */}
+          {/* Product Grid - Responsive with Hover Effects */}
           <div className="mx-auto max-w-7xl px-4 py-3 sm:py-4 lg:py-6">
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4 lg:gap-4">
+              {/* Skeleton Loading Cards */}
               {loading &&
                 Array.from({ length: 6 }).map((_, i) => (
                   <div key={i} className="overflow-hidden rounded-xl border border-stone-100 bg-white p-2 shadow-sm sm:p-2.5 lg:p-3">
@@ -464,6 +453,7 @@ export default function Storefront({
                   </div>
                 ))}
 
+              {/* Actual Product Cards with Hover Effect */}
               {!loading && sortedProducts.map((p) => {
                 const stock = p.stock_qty ?? 0;
                 const out = stock <= 0;
@@ -479,6 +469,7 @@ export default function Storefront({
                       justAdded ? "ring-2 ring-emerald-500 ring-offset-2" : "",
                     ].join(" ")}
                   >
+                    {/* Product Image */}
                     <div className="relative aspect-square overflow-hidden rounded-xl bg-gradient-to-br from-stone-50 to-white">
                       {p.photo_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
@@ -494,6 +485,7 @@ export default function Storefront({
                         </div>
                       )}
 
+                      {/* Stock Badge - Only show when low or out */}
                       {(out || low) && (
                         <div
                           className={[
@@ -508,6 +500,7 @@ export default function Storefront({
                       )}
                     </div>
 
+                    {/* Product Info - Responsive */}
                     <div className="mt-1.5 sm:mt-2">
                       <h4 className="line-clamp-2 text-xs font-semibold leading-snug text-stone-900 sm:text-sm">
                         {p.name}
@@ -517,6 +510,7 @@ export default function Storefront({
                       </div>
                     </div>
 
+                    {/* Add Button with Feedback Animation */}
                     <button
                       disabled={out}
                       onClick={() => add(p)}
@@ -550,6 +544,7 @@ export default function Storefront({
               })}
             </div>
 
+            {/* Empty State */}
             {!loading && sortedProducts.length === 0 && (
               <div className="rounded-xl border-2 border-dashed border-stone-300 bg-stone-50 p-8 text-center">
                 <Package className="mx-auto h-12 w-12 text-stone-400" />
@@ -570,9 +565,10 @@ export default function Storefront({
           </div>
         </div>
 
-        {/* Desktop Sidebar Cart */}
+        {/* DESKTOP SIDEBAR CART - Only visible on large screens */}
         <aside className="hidden lg:block lg:w-[380px] lg:flex-shrink-0">
           <div className="sticky top-6 rounded-xl border border-stone-200 bg-white p-6 shadow-lg">
+            {/* Cart Header */}
             <div className="mb-6 flex items-center gap-3">
               <ShoppingCart className="h-6 w-6 text-stone-900" />
               <div>
@@ -583,6 +579,7 @@ export default function Storefront({
               </div>
             </div>
 
+            {/* Cart Items */}
             <div className="max-h-[calc(100vh-300px)] space-y-3 overflow-auto">
               {!cart.length ? (
                 <div className="rounded-xl border-2 border-dashed border-stone-300 bg-stone-50 p-8 text-center">
@@ -634,6 +631,7 @@ export default function Storefront({
               )}
             </div>
 
+            {/* Checkout Button */}
             {cart.length > 0 && (
               <div className="mt-6 border-t border-stone-200 pt-6">
                 <div className="mb-4 flex justify-between text-sm">
@@ -653,12 +651,13 @@ export default function Storefront({
         </aside>
       </div>
 
-      {/* Mobile Cart Modal */}
+      {/* Mobile/Tablet Cart Modal */}
       {showCartDetails && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowCartDetails(false)} />
           <div className="absolute bottom-0 left-0 right-0 max-h-[85vh] overflow-hidden rounded-t-3xl bg-white shadow-2xl">
             <div className="p-6">
+              {/* Cart Header */}
               <div className="mb-6 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <ShoppingCart className="h-6 w-6 text-stone-900" />
@@ -677,6 +676,7 @@ export default function Storefront({
                 </button>
               </div>
 
+              {/* Cart Items */}
               <div className="max-h-[55vh] space-y-3 overflow-auto">
                 {!cart.length ? (
                   <div className="rounded-xl border-2 border-dashed border-stone-300 bg-stone-50 p-8 text-center">
@@ -728,6 +728,7 @@ export default function Storefront({
                 )}
               </div>
 
+              {/* Checkout Button */}
               {cart.length > 0 && (
                 <div className="mt-6 border-t border-stone-200 pt-6">
                   <div className="mb-4 flex justify-between text-sm">
@@ -748,7 +749,7 @@ export default function Storefront({
         </div>
       )}
 
-      {/* Floating Cart Button - NO BORDER! */}
+      {/* Floating Cart Button - No Border! */}
       <div className="fixed bottom-4 left-4 right-4 z-40 lg:hidden">
         <button
           onClick={() => setShowCartDetails(true)}
@@ -774,7 +775,7 @@ export default function Storefront({
         </button>
       </div>
 
-      {/* Animations */}
+      {/* Custom Animations */}
       <style jsx global>{`
         @keyframes shimmer {
           0% { background-position: -200% 0; }

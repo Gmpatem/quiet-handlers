@@ -125,19 +125,14 @@ export default function Storefront({
 
   useEffect(() => {
     const all = cache[ALL] ?? [];
-    const categoriesWithStock = new Map<string, number>();
+    const counts = new Map<string, number>();
 
-    // Only count categories that have at least one product with stock > 0
     for (const p of all) {
       const cat = normalizeCategory(p.category);
-      const hasStock = (p.stock_qty ?? 0) > 0;
-      
-      if (hasStock) {
-        categoriesWithStock.set(cat, (categoriesWithStock.get(cat) ?? 0) + 1);
-      }
+      counts.set(cat, (counts.get(cat) ?? 0) + 1);
     }
 
-    let arr = Array.from(categoriesWithStock.entries())
+    let arr = Array.from(counts.entries())
       .filter(([, n]) => n > 0)
       .map(([c]) => c);
 
