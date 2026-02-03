@@ -1,11 +1,12 @@
 import { supabaseServer } from "@/lib/supabaseServer";
-import OrdersClient, { OrderRow, PaymentRow } from "./OrdersClient";
+import OrdersClient, { OrderRow, PaymentRow, OrderItemRow } from "./OrdersClient";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminOrdersPage() {
   const supabase = await supabaseServer();
 
+  // Fetch orders
   const { data: orders, error } = await supabase
     .from("orders")
     .select(
@@ -33,6 +34,7 @@ export default async function AdminOrdersPage() {
 
   const orderIds = (orders ?? []).map((o: any) => o.id);
 
+  // Fetch payments
   let payments: PaymentRow[] = [];
   if (orderIds.length) {
     const { data: pays } = await supabase
@@ -43,5 +45,22 @@ export default async function AdminOrdersPage() {
     payments = (pays ?? []) as any;
   }
 
-  return <OrdersClient initialOrders={(orders ?? []) as any} initialPayments={payments} />;
+  // TASK 2 FIX: Fetch order_items to prevent crashes
+  let orderItems: OrderItemRow[] = [];
+  if (orderIds.length) {
+    const { data: items } = await supabase
+      .from("order_items")
+      .select("id, order_id, product_id, product_name, qty, price_at_order_cents")
+      .in("order_id", orderIds);
+
+    orderItems = (items ?? []) as any;
+  }
+
+  return (
+    <OrdersClient
+      initialOrders={(orders ?? []) as any}
+      initialPayments={payments}
+      initialItems={orderItems}
+    />
+  );
 }

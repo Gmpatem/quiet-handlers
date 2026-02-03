@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useMemo } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
-import OrderDrawer from "./OrderDrawer";
+import { Search, Package, Clock, CheckCircle, XCircle, Truck, AlertCircle } from "lucide-react";
 
 export type OrderRow = {
   id: string;
@@ -11,14 +10,14 @@ export type OrderRow = {
   customer_name: string | null;
   contact: string | null;
   notes: string | null;
-  fulfillment: "pickup" | "delivery" | string;
+  fulfillment: string | null;
   pickup_location: string | null;
-  delivery_fee_cents: number;
+  delivery_fee_cents: number | null;
   delivery_location: string | null;
-  payment_method: "gcash" | "cod" | string;
-  subtotal_cents: number;
-  total_cents: number;
-  status: string;
+  payment_method: string | null;
+  subtotal_cents: number | null;
+  total_cents: number | null;
+  status: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -26,11 +25,20 @@ export type OrderRow = {
 export type PaymentRow = {
   id: string;
   order_id: string;
-  method: string;
-  amount_cents: number;
+  method: string | null;
+  amount_cents: number | null;
   reference_number: string | null;
-  status: string;
+  status: string | null;
   created_at: string;
+};
+
+export type OrderItemRow = {
+  id: string;
+  order_id: string;
+  product_id: string | null;
+  product_name: string | null;
+  qty: number;
+  price_at_order_cents: number;
 };
 
 function peso(cents: number) {
@@ -41,447 +49,531 @@ function time(ts: string) {
   try {
     const d = new Date(ts);
     if (Number.isNaN(d.getTime())) return ts;
-
     const yyyy = d.getFullYear();
     const mm = String(d.getMonth() + 1).padStart(2, "0");
     const dd = String(d.getDate()).padStart(2, "0");
     const hh = String(d.getHours()).padStart(2, "0");
     const min = String(d.getMinutes()).padStart(2, "0");
-
     return `${yyyy}-${mm}-${dd} ${hh}:${min}`;
   } catch {
     return ts;
   }
 }
 
-function pillClass(kind: "good" | "warn" | "bad" | "neutral") {
-  if (kind === "good") return "bg-emerald-50 text-emerald-700 border border-emerald-200";
-  if (kind === "warn") return "bg-amber-50 text-amber-800 border border-amber-200";
-  if (kind === "bad") return "bg-red-50 text-red-700 border border-red-200";
-  return "bg-stone-100 text-stone-700 border border-stone-200";
-}
-
-function pickupLabel(pickup_location: string | null, notes: string | null) {
-  const p = (pickup_location ?? "").toLowerCase();
-  if (p.includes("boys") || p.includes("411")) return "Boys 411";
-  if (p.includes("girls") || p.includes("206")) return "Girls 206";
-  const n = (notes ?? "").toLowerCase();
-  if (n.includes("boys dorm") || n.includes("room 411")) return "Boys 411";
-  if (n.includes("girls dorm") || n.includes("room 206")) return "Girls 206";
-  return "—";
-}
-
-function pickPendingLabel(labels: string[]) {
-  const lower = labels.map((x) => x.toLowerCase());
-  const i = lower.findIndex((s) => s.includes("pending") || s.includes("unpaid") || s.includes("await"));
-  if (i >= 0) return labels[i];
-  return labels[0] ?? "pending";
-}
-
-function pickPaidLabel(labels: string[]) {
-  const lower = labels.map((x) => x.toLowerCase());
-  const i = lower.findIndex((s) => s.includes("paid") || s.includes("success") || s.includes("complete"));
-  if (i >= 0) return labels[i];
-  return labels[labels.length - 1] ?? "paid";
-}
-
-/**
- * RPC helper that tries multiple param shapes.
- * This keeps us compatible even if function param names differ.
- */
-async function rpcTry(supabase: any, fn: string, variants: Record<string, any>[]) {
-  let lastErr: any = null;
-  for (const args of variants) {
-    const { data, error } = await supabase.rpc(fn, args);
-    if (!error) return { data, error: null };
-    lastErr = error;
-  }
-  return { data: null, error: lastErr };
-}
-
 export default function OrdersClient({
   initialOrders,
   initialPayments,
+  initialItems,
 }: {
   initialOrders: OrderRow[];
   initialPayments: PaymentRow[];
+  initialItems: OrderItemRow[];
 }) {
-  const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  // TASK 3 FIX: Add mounted state for hydration safety
+  const [mounted, setMounted] = useState(false);
 
-  const [q, setQ] = useState("");
-  const [status, setStatus] = useState<string>("all");
-  const [fulfillment, setFulfillment] = useState<string>("all");
-  const [method, setMethod] = useState<string>("all");
+  const [orders, setOrders] = useState<OrderRow[]>(initialOrders ?? []);
+  const [payments, setPayments] = useState<PaymentRow[]>(initialPayments ?? []);
+  const [items, setItems] = useState<OrderItemRow[]>(initialItems ?? []);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
 
-  const [open, setOpen] = useState(false);
-  const [activeOrder, setActiveOrder] = useState<OrderRow | null>(null);
-
-  const [payPending, setPayPending] = useState<string>("pending");
-  const [payPaid, setPayPaid] = useState<string>("paid");
-
+  // Prevent hydration mismatch
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const supabase = supabaseBrowser();
-        const { data, error } = await supabase.rpc("get_payment_status_enum");
-        if (error) return;
-        if (!Array.isArray(data) || data.length === 0) return;
-        const labels = data.map(String);
-        if (cancelled) return;
-        setPayPending(pickPendingLabel(labels));
-        setPayPaid(pickPaidLabel(labels));
-      } catch {}
-    })();
-    return () => {
-      cancelled = true;
-    };
+    setMounted(true);
   }, []);
 
-  const paymentsByOrder = useMemo(() => {
-    const map = new Map<string, PaymentRow[]>();
-    for (const p of initialPayments ?? []) {
-      map.set(p.order_id, [...(map.get(p.order_id) ?? []), p]);
-    }
-    return map;
-  }, [initialPayments]);
+  const supabase = useMemo(() => supabaseBrowser(), []);
 
-  const paymentBadge = useMemo(() => {
-    const result = new Map<string, { label: string; kind: "good" | "warn" | "bad" | "neutral" }>();
-    for (const o of initialOrders ?? []) {
-      const pays = paymentsByOrder.get(o.id) ?? [];
-      if (!pays.length) {
-        result.set(o.id, { label: "no payment", kind: "neutral" });
-        continue;
-      }
-      const latest = [...pays].sort((a, b) => (a.created_at > b.created_at ? -1 : 1))[0];
-      const s = (latest.status || "").toLowerCase();
-      if (s.includes("paid") || s.includes("success") || s.includes("complete")) {
-        result.set(o.id, { label: latest.status, kind: "good" });
-      } else {
-        // Only pending/paid exist in your enum; treat anything else as warn
-        result.set(o.id, { label: latest.status, kind: "warn" });
-      }
-    }
-    return result;
-  }, [initialOrders, paymentsByOrder]);
+  // Filtered orders based on search and status
+  const filteredOrders = useMemo(() => {
+    let result = orders ?? [];
 
-  const filtered = useMemo(() => {
-    const query = q.trim().toLowerCase();
-    return (initialOrders ?? []).filter((o) => {
-      if (status !== "all" && String(o.status) !== status) return false;
-      if (fulfillment !== "all" && String(o.fulfillment) !== fulfillment) return false;
-      if (method !== "all" && String(o.payment_method) !== method) return false;
-      if (!query) return true;
-      const pickup = pickupLabel(o.pickup_location, o.notes).toLowerCase();
-      return (
-        (o.order_code ?? "").toLowerCase().includes(query) ||
-        (o.customer_name ?? "").toLowerCase().includes(query) ||
-        (o.contact ?? "").toLowerCase().includes(query) ||
-        pickup.includes(query)
+    // Search filter
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter(
+        (o) =>
+          (o.order_code ?? "").toLowerCase().includes(q) ||
+          (o.customer_name ?? "").toLowerCase().includes(q) ||
+          (o.contact ?? "").toLowerCase().includes(q) ||
+          o.id.toLowerCase().includes(q)
       );
-    });
-  }, [initialOrders, q, status, fulfillment, method]);
+    }
 
-  const statusOptions = useMemo(() => {
-    const set = new Set<string>();
-    for (const o of initialOrders ?? []) set.add(String(o.status));
-    return ["all", ...Array.from(set).sort()];
-  }, [initialOrders]);
+    // Status filter
+    if (statusFilter !== "all") {
+      result = result.filter((o) => (o.status ?? "pending") === statusFilter);
+    }
 
-  function openOrder(o: OrderRow) {
-    setActiveOrder(o);
-    setOpen(true);
+    return result;
+  }, [orders, search, statusFilter]);
+
+  // Update order status
+  async function handleUpdateStatus(orderId: string, newStatus: string) {
+    try {
+      const { error } = await supabase
+        .from("orders")
+        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .eq("id", orderId);
+
+      if (error) throw error;
+
+      // Update local state
+      setOrders((prev) =>
+        prev.map((o) => (o.id === orderId ? { ...o, status: newStatus, updated_at: new Date().toISOString() } : o))
+      );
+    } catch (err: any) {
+      console.error("Failed to update order status:", err);
+      alert("Failed to update status: " + (err?.message ?? "Unknown error"));
+    }
   }
 
-  async function updateOrderStatus(orderId: string, next: string) {
-    startTransition(async () => {
-      const supabase = supabaseBrowser();
+  // Verify payment using RPC function
+  async function handleVerifyPayment(orderId: string, paymentStatus: string) {
+    try {
+      const { error } = await supabase.rpc("admin_verify_payment", {
+        p_order_id: orderId,
+        p_status: paymentStatus,
+      });
 
-      // ✅ RPC ONLY
-      const { error } = await rpcTry(supabase, "admin_set_order_status", [
-        { order_id: orderId, status: next },
-        { order_id: orderId, next_status: next },
-        { p_order_id: orderId, p_status: next },
-        { p_order_id: orderId, p_next_status: next },
-      ]);
+      if (error) throw error;
 
-      if (error) return alert(`Failed: ${error.message}`);
-      router.refresh();
-    });
-  }
+      // Fetch updated payments for this order
+      const { data: updatedPayments } = await supabase
+        .from("payments")
+        .select("id, order_id, method, amount_cents, reference_number, status, created_at")
+        .eq("order_id", orderId);
 
-  async function confirmOrder(orderId: string) {
-    startTransition(async () => {
-      const supabase = supabaseBrowser();
-
-      // Try admin_confirm_order first, fallback to status=confirmed
-      const r1 = await rpcTry(supabase, "admin_confirm_order", [
-        { order_id: orderId },
-        { p_order_id: orderId },
-      ]);
-
-      if (!r1.error) {
-        router.refresh();
-        return;
+      if (updatedPayments) {
+        // Update local payments state
+        setPayments((prev) => {
+          const filtered = prev.filter((p) => p.order_id !== orderId);
+          return [...filtered, ...(updatedPayments as PaymentRow[])];
+        });
       }
 
-      const r2 = await rpcTry(supabase, "admin_set_order_status", [
-        { order_id: orderId, status: "confirmed" },
-        { p_order_id: orderId, p_status: "confirmed" },
-      ]);
-
-      if (r2.error) return alert(`Failed: ${r2.error.message}`);
-      router.refresh();
-    });
+      const orderCode = orders.find((o) => o.id === orderId)?.order_code ?? orderId.slice(0, 8);
+      alert(`Payment for Order ${orderCode} verified as ${paymentStatus.toUpperCase()}!`);
+    } catch (err: any) {
+      console.error("Failed to verify payment:", err);
+      alert("Payment verification failed: " + (err?.message ?? "Unknown error"));
+    }
   }
 
-  async function markPaid(orderId: string) {
-    startTransition(async () => {
-      const supabase = supabaseBrowser();
+  // Quick confirm - Updates order status and auto-verifies GCash payments
+  async function handleQuickConfirm(order: OrderRow) {
+    try {
+      // Update order status to confirmed
+      const { error: orderError } = await supabase
+        .from("orders")
+        .update({ status: "confirmed", updated_at: new Date().toISOString() })
+        .eq("id", order.id);
 
-      // ✅ RPC ONLY (no payments.update/insert)
-      // Prefer specific function if present
-      const r1 = await rpcTry(supabase, "admin_verify_gcash_paid", [
-        { order_id: orderId },
-        { p_order_id: orderId },
-      ]);
+      if (orderError) throw orderError;
 
-      if (!r1.error) {
-        router.refresh();
-        return;
+      // Auto-verify payment if GCash
+      if (order.payment_method?.toLowerCase() === "gcash") {
+        const { error: paymentError } = await supabase.rpc("admin_verify_payment", {
+          p_order_id: order.id,
+          p_status: "paid",
+        });
+
+        if (paymentError) throw paymentError;
+
+        // Update local payments state
+        const { data: updatedPayments } = await supabase
+          .from("payments")
+          .select("id, order_id, method, amount_cents, reference_number, status, created_at")
+          .eq("order_id", order.id);
+
+        if (updatedPayments) {
+          setPayments((prev) => {
+            const filtered = prev.filter((p) => p.order_id !== order.id);
+            return [...filtered, ...(updatedPayments as PaymentRow[])];
+          });
+        }
       }
 
-      // Fallback to generic admin_verify_payment if your DB uses that naming
-      const r2 = await rpcTry(supabase, "admin_verify_payment", [
-        { order_id: orderId, status: payPaid },
-        { p_order_id: orderId, p_status: payPaid },
-      ]);
+      // Update local order state
+      setOrders((prev) =>
+        prev.map((o) => (o.id === order.id ? { ...o, status: "confirmed", updated_at: new Date().toISOString() } : o))
+      );
 
-      if (r2.error) return alert(`Failed: ${r2.error.message}`);
-      router.refresh();
-    });
+      const paymentMsg = order.payment_method?.toLowerCase() === "gcash" ? " & payment verified" : "";
+      alert(`Order ${order.order_code ?? order.id.slice(0, 8)} confirmed${paymentMsg}!`);
+    } catch (err: any) {
+      console.error("Failed to confirm order:", err);
+      alert("Confirmation failed: " + (err?.message ?? "Unknown error"));
+    }
+  }
+
+  // Quick status change - Updates order to next logical status
+  async function handleQuickStatusChange(orderId: string, newStatus: string) {
+    await handleUpdateStatus(orderId, newStatus);
+  }
+
+  // Delete order - Removes unrealized orders
+  async function handleDeleteOrder(order: OrderRow) {
+    const orderCode = order.order_code ?? order.id.slice(0, 8);
+    
+    if (!confirm(`⚠️ Delete order ${orderCode}?\n\nCustomer: ${order.customer_name}\nTotal: ${peso(order.total_cents ?? 0)}\n\nThis action cannot be undone!`)) {
+      return;
+    }
+
+    try {
+      // Delete order (cascade should handle payments and items)
+      const { error } = await supabase
+        .from("orders")
+        .delete()
+        .eq("id", order.id);
+
+      if (error) throw error;
+
+      // Update local state - remove order
+      setOrders((prev) => prev.filter((o) => o.id !== order.id));
+      setPayments((prev) => prev.filter((p) => p.order_id !== order.id));
+      setItems((prev) => prev.filter((i) => i.order_id !== order.id));
+
+      alert(`Order ${orderCode} deleted successfully.`);
+    } catch (err: any) {
+      console.error("Failed to delete order:", err);
+      alert("Delete failed: " + (err?.message ?? "Unknown error"));
+    }
+  }
+
+  // Quick confirm with auto-payment for GCash
+  async function handleQuickConfirm(order: OrderRow) {
+    try {
+      // Update order status to confirmed
+      await handleUpdateStatus(order.id, "confirmed");
+
+      // Auto-verify payment if GCash
+      if (order.payment_method?.toLowerCase() === "gcash") {
+        await handleVerifyPayment(order.id, "paid");
+      }
+    } catch (err: any) {
+      console.error("Failed to confirm order:", err);
+      alert("Failed to confirm order: " + (err?.message ?? "Unknown error"));
+    }
+  }
+
+  // Quick status change for single-click actions
+  async function handleQuickStatusChange(orderId: string, newStatus: string) {
+    await handleUpdateStatus(orderId, newStatus);
+  }
+
+  // Open order drawer
+  function openOrder(order: OrderRow) {
+    setActiveOrder(order);
+    setDrawerOpen(true);
+  }
+
+  // Pickup location label
+  function pickupLabel(o: OrderRow): string {
+    if (String(o.fulfillment) === "delivery") {
+      return o.delivery_location ?? "Not specified";
+    }
+    return o.pickup_location ?? "Not specified";
+  }
+
+  // Status badge color
+  function statusColor(status: string | null): string {
+    switch (status) {
+      case "confirmed":
+      case "ready":
+        return "bg-emerald-100 text-emerald-700 border-emerald-200";
+      case "preparing":
+      case "out_for_delivery":
+        return "bg-amber-100 text-amber-700 border-amber-200";
+      case "cancelled":
+        return "bg-red-100 text-red-700 border-red-200";
+      case "pending":
+      default:
+        return "bg-stone-100 text-stone-700 border-stone-200";
+    }
+  }
+
+  // Status icon
+  function statusIcon(status: string | null) {
+    switch (status) {
+      case "confirmed":
+      case "ready":
+        return <CheckCircle className="h-4 w-4" />;
+      case "preparing":
+        return <Clock className="h-4 w-4" />;
+      case "out_for_delivery":
+        return <Truck className="h-4 w-4" />;
+      case "cancelled":
+        return <XCircle className="h-4 w-4" />;
+      case "pending":
+      default:
+        return <AlertCircle className="h-4 w-4" />;
+    }
+  }
+
+  // Don't render until mounted to prevent hydration mismatch
+  if (!mounted) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-amber-700 border-t-transparent" />
+      </div>
+    );
   }
 
   return (
-    <div>
-      <div className="mb-4">
-        <h1 className="text-xl font-semibold text-stone-900">Orders</h1>
-        <p className="mt-1 text-sm text-stone-600">Manage orders on the go</p>
-      </div>
+    <div className="min-h-screen bg-gradient-to-b from-stone-50 to-white p-4 sm:p-6 lg:p-8">
+      <div className="mx-auto max-w-7xl">
+        {/* Header */}
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-stone-900 sm:text-3xl">Orders</h1>
+            <p className="mt-1 text-sm text-stone-600">
+              {filteredOrders.length} {filteredOrders.length === 1 ? "order" : "orders"}
+            </p>
+          </div>
 
-      <div className="space-y-3">
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search orders..."
-          className="w-full touch-target rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-900 outline-none transition focus:border-amber-700 focus:ring-2 focus:ring-amber-700/20"
-        />
-
-        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-          <select
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-            className="touch-target flex-shrink-0 rounded-xl border border-stone-200 bg-white px-4 py-2 text-sm text-stone-900 outline-none transition focus:border-amber-700"
-          >
-            {statusOptions.map((s) => (
-              <option key={s} value={s}>
-                {s === "all" ? "All statuses" : s}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={fulfillment}
-            onChange={(e) => setFulfillment(e.target.value)}
-            className="touch-target flex-shrink-0 rounded-xl border border-stone-200 bg-white px-4 py-2 text-sm text-stone-900 outline-none transition focus:border-amber-700"
-          >
-            <option value="all">All</option>
-            <option value="pickup">Pickup</option>
-            <option value="delivery">Delivery</option>
-          </select>
-
-          <select
-            value={method}
-            onChange={(e) => setMethod(e.target.value)}
-            className="touch-target flex-shrink-0 rounded-xl border border-stone-200 bg-white px-4 py-2 text-sm text-stone-900 outline-none transition focus:border-amber-700"
-          >
-            <option value="all">All</option>
-            <option value="gcash">GCash</option>
-            <option value="cod">COD</option>
-          </select>
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-stone-400" />
+            <input
+              type="text"
+              placeholder="Search orders..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full rounded-xl border border-stone-200 bg-white py-2 pl-10 pr-4 text-sm transition focus:border-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-700/20 sm:w-64"
+            />
+          </div>
         </div>
-      </div>
 
-      {isPending && (
-        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-          Updating…
+        {/* Status Filter */}
+        <div className="mb-6 flex flex-wrap gap-2">
+          {["all", "pending", "confirmed", "cancelled"].map((status) => (
+            <button
+              key={status}
+              onClick={() => setStatusFilter(status)}
+              className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
+                statusFilter === status
+                  ? "border-amber-700 bg-amber-700 text-white"
+                  : "border-stone-200 bg-white text-stone-700 hover:border-amber-700 hover:bg-amber-50"
+              }`}
+            >
+              {status === "all" ? "All" : status.replace("_", " ")}
+            </button>
+          ))}
         </div>
-      )}
 
-      <div className="mt-4 space-y-3">
-        <div className="grid gap-3 lg:hidden">
-          {filtered.map((o) => {
-            const pb = paymentBadge.get(o.id) ?? { label: payPending, kind: "neutral" as const };
-            return (
-              <div key={o.id} className="touch-target rounded-xl border border-stone-200 bg-white p-4 shadow-sm transition active:scale-[0.98]">
-                <div className="flex items-start justify-between gap-3 border-b border-stone-100 pb-3">
-                  <div className="flex-1">
-                    <button onClick={() => openOrder(o)} className="text-left">
-                      <div className="font-semibold text-stone-900">{o.order_code ?? o.id.slice(0, 8)}</div>
-                      <div className="text-xs text-stone-500">{time(o.created_at)}</div>
-                    </button>
-                  </div>
-                  <div className="text-right">
-                    <div className="font-bold text-stone-900">{peso(o.total_cents ?? 0)}</div>
-                    <div className={"mt-1 inline-flex rounded-full px-2 py-0.5 text-xs font-semibold " + pillClass(pb.kind)}>
-                      {pb.label}
+        {/* Orders List */}
+        {filteredOrders.length === 0 ? (
+          <div className="rounded-xl border-2 border-dashed border-stone-300 bg-stone-50 p-8 text-center">
+            <Package className="mx-auto h-12 w-12 text-stone-400" />
+            <h3 className="mt-4 text-sm font-semibold text-stone-900">No orders found</h3>
+            <p className="mt-1 text-sm text-stone-500">
+              {search ? "Try adjusting your search" : "Orders will appear here"}
+            </p>
+          </div>
+        ) : (
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {filteredOrders.map((order) => {
+              const orderPayments = (payments ?? []).filter((p) => p.order_id === order.id);
+              const latestPayment = [...orderPayments].sort((a, b) => (a.created_at > b.created_at ? -1 : 1))[0];
+              const orderItems = (items ?? []).filter((item) => item.order_id === order.id);
+              const isGCash = order.payment_method?.toLowerCase() === "gcash";
+              const isPaid = latestPayment?.status === "paid";
+
+              // Get primary action button based on status
+              const getPrimaryButton = () => {
+                if (order.status === "pending") {
+                  return {
+                    label: "✓ Confirm Order",
+                    onClick: () => handleQuickConfirm(order),
+                    className: "flex-1 rounded-xl bg-emerald-600 px-6 py-4 text-base font-semibold text-white shadow-sm transition hover:bg-emerald-700 hover:shadow-md active:scale-[0.98]"
+                  };
+                } else if (order.status === "confirmed") {
+                  return {
+                    label: "✅ Order Confirmed",
+                    onClick: null,
+                    className: "flex-1 rounded-xl bg-stone-100 px-6 py-4 text-base font-semibold text-stone-600 cursor-default"
+                  };
+                } else if (order.status === "cancelled") {
+                  return null;
+                }
+              };
+
+              const getSecondaryButton = () => {
+                if (order.status === "pending") {
+                  return {
+                    label: "✕ Cancel",
+                    onClick: () => handleQuickStatusChange(order.id, "cancelled"),
+                    className: "rounded-xl border-2 border-red-200 bg-white px-5 py-4 text-base font-semibold text-red-600 shadow-sm transition hover:border-red-300 hover:bg-red-50 hover:shadow-md active:scale-[0.98]"
+                  };
+                }
+                return null;
+              };
+
+              const primaryBtn = getPrimaryButton();
+              const secondaryBtn = getSecondaryButton();
+
+              return (
+                <div
+                  key={order.id}
+                  className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-md transition hover:shadow-xl"
+                >
+                  {/* Card Header */}
+                  <div className="border-b border-stone-200 bg-gradient-to-r from-stone-50 to-white px-6 py-5">
+                    <div className="mb-3 flex items-start justify-between">
+                      <div>
+                        <div className="text-xs font-semibold uppercase tracking-wide text-stone-500">Order</div>
+                        <div className="mt-1 text-xl font-bold text-stone-900">
+                          {order.order_code ?? order.id.slice(0, 8)}
+                        </div>
+                      </div>
+                      <div className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold ${statusColor(order.status)}`}>
+                        {statusIcon(order.status)}
+                        <span>{(order.status ?? "pending").replace("_", " ")}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-base">
+                      <span className="font-semibold text-stone-900">{order.customer_name ?? "—"}</span>
+                      <span className="text-stone-300">•</span>
+                      <span className="text-sm text-stone-500">{time(order.created_at).split(" ")[1]}</span>
                     </div>
                   </div>
-                </div>
 
-                <div className="mt-3 space-y-2 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="text-stone-600">Customer</span>
-                    <span className="font-medium text-stone-900">{o.customer_name ?? "—"}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-stone-600">Pickup</span>
-                    <span className="font-medium text-stone-900">{pickupLabel(o.pickup_location, o.notes)}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-stone-600">Payment</span>
-                    <span className="font-medium text-stone-900">{String(o.payment_method).toUpperCase()}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-stone-600">Status</span>
-                    <div className="inline-flex rounded-full border border-stone-200 bg-stone-100 px-2 py-0.5 text-xs font-semibold text-stone-700">
-                      {o.status}
+                  {/* Card Body */}
+                  <div className="p-6">
+                    {/* Items Section - Emphasized */}
+                    <div className="mb-5 rounded-xl border-2 border-stone-300 bg-stone-50 p-4 shadow-sm">
+                      <div className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-stone-900">
+                        <span className="text-base">📦</span>
+                        <span>Items Ordered ({orderItems.length})</span>
+                      </div>
+                      <div className="space-y-2">
+                        {orderItems.map((item) => (
+                          <div key={item.id} className="flex items-center justify-between text-sm">
+                            <span className="text-stone-700">
+                              <span className="font-bold text-stone-900">{item.qty}x</span>{" "}
+                              {item.product_name ?? "Unknown"}
+                            </span>
+                            <span className="font-semibold text-stone-900">
+                              {peso((item.price_at_order_cents ?? 0) * (item.qty ?? 0))}
+                            </span>
+                          </div>
+                        ))}
+                        {orderItems.length === 0 && (
+                          <div className="text-sm italic text-stone-500">No items found</div>
+                        )}
+                      </div>
+                      <div className="mt-3 flex items-center justify-between border-t-2 border-stone-300 pt-3 text-base font-semibold text-stone-900">
+                        <span>Subtotal:</span>
+                        <span>{peso(order.subtotal_cents ?? 0)}</span>
+                      </div>
                     </div>
-                  </div>
-                </div>
 
-                <div className="mt-3 grid grid-cols-3 gap-2 border-t border-stone-100 pt-3">
-                  <button
-                    onClick={() => openOrder(o)}
-                    className="touch-target rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm font-medium text-stone-700 transition active:scale-95"
-                  >
-                    View
-                  </button>
-                  <button
-                    onClick={() => confirmOrder(o.id)}
-                    className="touch-target rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800 transition active:scale-95"
-                  >
-                    Confirm
-                  </button>
-                  <button
-                    onClick={() => markPaid(o.id)}
-                    className="touch-target rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 transition active:scale-95"
-                  >
-                    Mark Paid
-                  </button>
-                </div>
-              </div>
-            );
-          })}
+                    {/* Location & Payment - Side by Side */}
+                    <div className="mb-5 grid grid-cols-2 gap-3">
+                      {/* Location */}
+                      <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                        <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-amber-900">
+                          <span>📍</span>
+                          <span>{String(order.fulfillment) === "delivery" ? "Delivery" : "Pickup"}</span>
+                        </div>
+                        <div className="text-base font-semibold text-amber-800">{pickupLabel(order)}</div>
+                        {String(order.fulfillment) === "delivery" && order.delivery_fee_cents && order.delivery_fee_cents > 0 && (
+                          <div className="mt-2 text-xs text-amber-700">Fee: {peso(order.delivery_fee_cents)}</div>
+                        )}
+                      </div>
 
-          {!filtered.length && (
-            <div className="rounded-xl border-2 border-dashed border-stone-300 bg-stone-50 p-8 text-center">
-              <div className="text-sm text-stone-600">No orders found.</div>
-            </div>
-          )}
-        </div>
+                      {/* Payment */}
+                      <div className="rounded-xl border border-stone-200 bg-white p-4">
+                        <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-stone-600">
+                          <span>💳</span>
+                          <span>Payment</span>
+                        </div>
+                        <div className="text-sm font-medium text-stone-700">
+                          {(order.payment_method ?? "").toUpperCase()}
+                        </div>
+                        <div className={`mt-1 text-base font-bold ${isPaid ? "text-emerald-600" : "text-amber-700"}`}>
+                          {isPaid ? "PAID ✓" : "PENDING ⏳"}
+                        </div>
+                        
+                        {/* Payment action buttons for confirmed cash orders */}
+                        {order.status === "confirmed" && !isPaid && (
+                          <div className="mt-3 flex gap-2">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleVerifyPayment(order.id, "paid");
+                              }}
+                              className="flex-1 rounded-lg bg-emerald-600 px-2 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-700"
+                            >
+                              ✓ Paid
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleVerifyPayment(order.id, "failed");
+                              }}
+                              className="flex-1 rounded-lg border border-red-300 bg-white px-2 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-50"
+                            >
+                              ✕ Failed
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
 
-        <div className="hidden overflow-x-auto rounded-2xl border border-stone-200 shadow-sm lg:block">
-          <table className="w-full text-sm">
-            <thead className="bg-gradient-to-br from-stone-50 to-white text-left text-stone-600">
-              <tr className="border-b border-stone-200">
-                <th className="px-4 py-3 font-semibold">Order</th>
-                <th className="px-4 py-3 font-semibold">Customer</th>
-                <th className="px-4 py-3 font-semibold">Pickup</th>
-                <th className="px-4 py-3 font-semibold">Payment</th>
-                <th className="px-4 py-3 font-semibold">Status</th>
-                <th className="px-4 py-3 text-right font-semibold">Total</th>
-                <th className="px-4 py-3 text-right font-semibold">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white">
-              {filtered.map((o) => {
-                const pb = paymentBadge.get(o.id) ?? { label: payPending, kind: "neutral" as const };
-                return (
-                  <tr key={o.id} className="border-b border-stone-200 last:border-b-0 transition hover:bg-stone-50/50">
-                    <td className="px-4 py-3">
-                      <button onClick={() => openOrder(o)} className="text-left transition hover:underline">
-                        <div className="font-semibold text-stone-900">{o.order_code ?? o.id.slice(0, 8)}</div>
-                        <div className="text-xs text-stone-500">{time(o.created_at)}</div>
+                    {/* Total - Emphasized */}
+                    <div className="mb-5 rounded-xl border-2 border-amber-300 bg-gradient-to-br from-amber-50 to-yellow-50 p-5 text-center shadow-sm">
+                      <div className="text-sm font-semibold uppercase tracking-wide text-amber-900">Total</div>
+                      <div className="mt-1 text-3xl font-bold text-amber-900">{peso(order.total_cents ?? 0)}</div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex gap-3">
+                      {primaryBtn && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            primaryBtn.onClick?.();
+                          }}
+                          className={primaryBtn.className}
+                        >
+                          {primaryBtn.label}
+                        </button>
+                      )}
+                      
+                      {secondaryBtn && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            secondaryBtn.onClick?.();
+                          }}
+                          className={secondaryBtn.className}
+                        >
+                          {secondaryBtn.label}
+                        </button>
+                      )}
+                      
+                      {/* Delete Button - Always Present */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteOrder(order);
+                        }}
+                        className="rounded-xl border-2 border-stone-200 bg-white px-5 py-4 text-lg font-semibold text-red-600 shadow-sm transition hover:border-red-300 hover:bg-red-50 hover:shadow-md active:scale-[0.98]"
+                        title="Delete order"
+                      >
+                        🗑️
                       </button>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-stone-900">{o.customer_name ?? "—"}</div>
-                      <div className="text-xs text-stone-500">{o.contact ?? "—"}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-stone-900">{pickupLabel(o.pickup_location, o.notes)}</div>
-                      <div className="text-xs text-stone-500">{String(o.fulfillment)}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-stone-900">{String(o.payment_method)}</div>
-                      <div className={"mt-1 inline-flex rounded-full px-2 py-0.5 text-xs font-semibold " + pillClass(pb.kind)}>
-                        {pb.label}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="inline-flex rounded-full border border-stone-200 bg-stone-100 px-2 py-0.5 text-xs font-semibold text-stone-700">
-                        {o.status}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-right font-semibold text-stone-900">{peso(o.total_cents ?? 0)}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex justify-end gap-2">
-                        <button
-                          onClick={() => openOrder(o)}
-                          className="rounded-xl border border-stone-200 bg-white px-3 py-1.5 text-sm text-stone-700 transition hover:border-stone-300 hover:bg-stone-50"
-                        >
-                          View
-                        </button>
-                        <button
-                          onClick={() => confirmOrder(o.id)}
-                          className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm text-amber-800 transition hover:bg-amber-100"
-                        >
-                          Confirm
-                        </button>
-                        <button
-                          onClick={() => markPaid(o.id)}
-                          className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-sm text-emerald-700 transition hover:bg-emerald-100"
-                        >
-                          Mark Paid
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-              {!filtered.length && (
-                <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-stone-600">
-                    No orders found.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
-
-      <OrderDrawer
-        open={open}
-        setOpen={setOpen}
-        order={activeOrder}
-        payments={activeOrder ? paymentsByOrder.get(activeOrder.id) ?? [] : []}
-        onUpdateStatus={updateOrderStatus}
-        pickupLabel={(o) => pickupLabel(o.pickup_location, o.notes)}
-      />
     </div>
   );
 }
