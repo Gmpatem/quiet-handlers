@@ -69,27 +69,22 @@ export default function OrdersClient({
   initialPayments: PaymentRow[];
   initialItems: OrderItemRow[];
 }) {
-  // TASK 3 FIX: Add mounted state for hydration safety
   const [mounted, setMounted] = useState(false);
-
   const [orders, setOrders] = useState<OrderRow[]>(initialOrders ?? []);
   const [payments, setPayments] = useState<PaymentRow[]>(initialPayments ?? []);
   const [items, setItems] = useState<OrderItemRow[]>(initialItems ?? []);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
-  // Prevent hydration mismatch
   useEffect(() => {
     setMounted(true);
   }, []);
 
   const supabase = useMemo(() => supabaseBrowser(), []);
 
-  // Filtered orders based on search and status
   const filteredOrders = useMemo(() => {
     let result = orders ?? [];
 
-    // Search filter
     if (search.trim()) {
       const q = search.toLowerCase();
       result = result.filter(
@@ -101,7 +96,6 @@ export default function OrdersClient({
       );
     }
 
-    // Status filter
     if (statusFilter !== "all") {
       result = result.filter((o) => (o.status ?? "pending") === statusFilter);
     }
@@ -109,7 +103,6 @@ export default function OrdersClient({
     return result;
   }, [orders, search, statusFilter]);
 
-  // Update order status
   async function handleUpdateStatus(orderId: string, newStatus: string) {
     try {
       const { error } = await supabase
@@ -119,7 +112,6 @@ export default function OrdersClient({
 
       if (error) throw error;
 
-      // Update local state
       setOrders((prev) =>
         prev.map((o) => (o.id === orderId ? { ...o, status: newStatus, updated_at: new Date().toISOString() } : o))
       );
@@ -129,7 +121,6 @@ export default function OrdersClient({
     }
   }
 
-  // Verify payment using RPC function
   async function handleVerifyPayment(orderId: string, paymentStatus: string) {
     try {
       const { error } = await supabase.rpc("admin_verify_payment", {
@@ -139,14 +130,12 @@ export default function OrdersClient({
 
       if (error) throw error;
 
-      // Fetch updated payments for this order
       const { data: updatedPayments } = await supabase
         .from("payments")
         .select("id, order_id, method, amount_cents, reference_number, status, created_at")
         .eq("order_id", orderId);
 
       if (updatedPayments) {
-        // Update local payments state
         setPayments((prev) => {
           const filtered = prev.filter((p) => p.order_id !== orderId);
           return [...filtered, ...(updatedPayments as PaymentRow[])];
@@ -161,10 +150,8 @@ export default function OrdersClient({
     }
   }
 
-  // Quick confirm - Updates order status and auto-verifies GCash payments
   async function handleQuickConfirm(order: OrderRow) {
     try {
-      // Update order status to confirmed
       const { error: orderError } = await supabase
         .from("orders")
         .update({ status: "confirmed", updated_at: new Date().toISOString() })
@@ -172,7 +159,6 @@ export default function OrdersClient({
 
       if (orderError) throw orderError;
 
-      // Auto-verify payment if GCash
       if (order.payment_method?.toLowerCase() === "gcash") {
         const { error: paymentError } = await supabase.rpc("admin_verify_payment", {
           p_order_id: order.id,
@@ -181,7 +167,6 @@ export default function OrdersClient({
 
         if (paymentError) throw paymentError;
 
-        // Update local payments state
         const { data: updatedPayments } = await supabase
           .from("payments")
           .select("id, order_id, method, amount_cents, reference_number, status, created_at")
@@ -195,7 +180,6 @@ export default function OrdersClient({
         }
       }
 
-      // Update local order state
       setOrders((prev) =>
         prev.map((o) => (o.id === order.id ? { ...o, status: "confirmed", updated_at: new Date().toISOString() } : o))
       );
@@ -208,12 +192,10 @@ export default function OrdersClient({
     }
   }
 
-  // Quick status change - Updates order to next logical status
   async function handleQuickStatusChange(orderId: string, newStatus: string) {
     await handleUpdateStatus(orderId, newStatus);
   }
 
-  // Delete order - Removes unrealized orders
   async function handleDeleteOrder(order: OrderRow) {
     const orderCode = order.order_code ?? order.id.slice(0, 8);
     
@@ -222,7 +204,6 @@ export default function OrdersClient({
     }
 
     try {
-      // Delete order (cascade should handle payments and items)
       const { error } = await supabase
         .from("orders")
         .delete()
@@ -230,7 +211,6 @@ export default function OrdersClient({
 
       if (error) throw error;
 
-      // Update local state - remove order
       setOrders((prev) => prev.filter((o) => o.id !== order.id));
       setPayments((prev) => prev.filter((p) => p.order_id !== order.id));
       setItems((prev) => prev.filter((i) => i.order_id !== order.id));
@@ -242,34 +222,6 @@ export default function OrdersClient({
     }
   }
 
-  // Quick confirm with auto-payment for GCash
-  async function handleQuickConfirm(order: OrderRow) {
-    try {
-      // Update order status to confirmed
-      await handleUpdateStatus(order.id, "confirmed");
-
-      // Auto-verify payment if GCash
-      if (order.payment_method?.toLowerCase() === "gcash") {
-        await handleVerifyPayment(order.id, "paid");
-      }
-    } catch (err: any) {
-      console.error("Failed to confirm order:", err);
-      alert("Failed to confirm order: " + (err?.message ?? "Unknown error"));
-    }
-  }
-
-  // Quick status change for single-click actions
-  async function handleQuickStatusChange(orderId: string, newStatus: string) {
-    await handleUpdateStatus(orderId, newStatus);
-  }
-
-  // Open order drawer
-  function openOrder(order: OrderRow) {
-    setActiveOrder(order);
-    setDrawerOpen(true);
-  }
-
-  // Pickup location label
   function pickupLabel(o: OrderRow): string {
     if (String(o.fulfillment) === "delivery") {
       return o.delivery_location ?? "Not specified";
@@ -277,7 +229,6 @@ export default function OrdersClient({
     return o.pickup_location ?? "Not specified";
   }
 
-  // Status badge color
   function statusColor(status: string | null): string {
     switch (status) {
       case "confirmed":
@@ -294,25 +245,23 @@ export default function OrdersClient({
     }
   }
 
-  // Status icon
   function statusIcon(status: string | null) {
     switch (status) {
       case "confirmed":
       case "ready":
-        return <CheckCircle className="h-4 w-4" />;
+        return <CheckCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4" />;
       case "preparing":
-        return <Clock className="h-4 w-4" />;
+        return <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4" />;
       case "out_for_delivery":
-        return <Truck className="h-4 w-4" />;
+        return <Truck className="h-3.5 w-3.5 sm:h-4 sm:w-4" />;
       case "cancelled":
-        return <XCircle className="h-4 w-4" />;
+        return <XCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4" />;
       case "pending":
       default:
-        return <AlertCircle className="h-4 w-4" />;
+        return <AlertCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4" />;
     }
   }
 
-  // Don't render until mounted to prevent hydration mismatch
   if (!mounted) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -322,37 +271,37 @@ export default function OrdersClient({
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-stone-50 to-white p-4 sm:p-6 lg:p-8">
+    <div className="min-h-screen bg-gradient-to-b from-stone-50 to-white p-3 sm:p-6 lg:p-8">
       <div className="mx-auto max-w-7xl">
         {/* Header */}
-        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mb-4 sm:mb-6 flex flex-col gap-3 sm:gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-stone-900 sm:text-3xl">Orders</h1>
-            <p className="mt-1 text-sm text-stone-600">
+            <h1 className="text-xl font-bold text-stone-900 sm:text-2xl lg:text-3xl">Orders</h1>
+            <p className="mt-1 text-xs sm:text-sm text-stone-600">
               {filteredOrders.length} {filteredOrders.length === 1 ? "order" : "orders"}
             </p>
           </div>
 
           {/* Search */}
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-stone-400" />
+            <Search className="absolute left-3 top-1/2 h-4 w-4 sm:h-5 sm:w-5 -translate-y-1/2 text-stone-400" />
             <input
               type="text"
               placeholder="Search orders..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full rounded-xl border border-stone-200 bg-white py-2 pl-10 pr-4 text-sm transition focus:border-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-700/20 sm:w-64"
+              className="w-full rounded-xl border border-stone-200 bg-white py-2 pl-9 sm:pl-10 pr-4 text-xs sm:text-sm transition focus:border-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-700/20 sm:w-64"
             />
           </div>
         </div>
 
         {/* Status Filter */}
-        <div className="mb-6 flex flex-wrap gap-2">
+        <div className="mb-4 sm:mb-6 flex flex-wrap gap-2">
           {["all", "pending", "confirmed", "cancelled"].map((status) => (
             <button
               key={status}
               onClick={() => setStatusFilter(status)}
-              className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
+              className={`rounded-lg border px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm font-medium transition ${
                 statusFilter === status
                   ? "border-amber-700 bg-amber-700 text-white"
                   : "border-stone-200 bg-white text-stone-700 hover:border-amber-700 hover:bg-amber-50"
@@ -365,39 +314,36 @@ export default function OrdersClient({
 
         {/* Orders List */}
         {filteredOrders.length === 0 ? (
-          <div className="rounded-xl border-2 border-dashed border-stone-300 bg-stone-50 p-8 text-center">
-            <Package className="mx-auto h-12 w-12 text-stone-400" />
-            <h3 className="mt-4 text-sm font-semibold text-stone-900">No orders found</h3>
-            <p className="mt-1 text-sm text-stone-500">
+          <div className="rounded-xl border-2 border-dashed border-stone-300 bg-stone-50 p-6 sm:p-8 text-center">
+            <Package className="mx-auto h-10 w-10 sm:h-12 sm:w-12 text-stone-400" />
+            <h3 className="mt-3 sm:mt-4 text-sm font-semibold text-stone-900">No orders found</h3>
+            <p className="mt-1 text-xs sm:text-sm text-stone-500">
               {search ? "Try adjusting your search" : "Orders will appear here"}
             </p>
           </div>
         ) : (
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 sm:gap-5 lg:gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {filteredOrders.map((order) => {
               const orderPayments = (payments ?? []).filter((p) => p.order_id === order.id);
               const latestPayment = [...orderPayments].sort((a, b) => (a.created_at > b.created_at ? -1 : 1))[0];
               const orderItems = (items ?? []).filter((item) => item.order_id === order.id);
-              const isGCash = order.payment_method?.toLowerCase() === "gcash";
               const isPaid = latestPayment?.status === "paid";
 
-              // Get primary action button based on status
               const getPrimaryButton = () => {
                 if (order.status === "pending") {
                   return {
-                    label: "✓ Confirm Order",
+                    label: "✓ Confirm",
                     onClick: () => handleQuickConfirm(order),
-                    className: "flex-1 rounded-xl bg-emerald-600 px-6 py-4 text-base font-semibold text-white shadow-sm transition hover:bg-emerald-700 hover:shadow-md active:scale-[0.98]"
+                    className: "flex-1 rounded-lg sm:rounded-xl bg-emerald-600 px-3 sm:px-6 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 active:scale-[0.98]"
                   };
                 } else if (order.status === "confirmed") {
                   return {
-                    label: "✅ Order Confirmed",
+                    label: "✅ Confirmed",
                     onClick: null,
-                    className: "flex-1 rounded-xl bg-stone-100 px-6 py-4 text-base font-semibold text-stone-600 cursor-default"
+                    className: "flex-1 rounded-lg sm:rounded-xl bg-stone-100 px-3 sm:px-6 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold text-stone-600 cursor-default"
                   };
-                } else if (order.status === "cancelled") {
-                  return null;
                 }
+                return null;
               };
 
               const getSecondaryButton = () => {
@@ -405,7 +351,7 @@ export default function OrdersClient({
                   return {
                     label: "✕ Cancel",
                     onClick: () => handleQuickStatusChange(order.id, "cancelled"),
-                    className: "rounded-xl border-2 border-red-200 bg-white px-5 py-4 text-base font-semibold text-red-600 shadow-sm transition hover:border-red-300 hover:bg-red-50 hover:shadow-md active:scale-[0.98]"
+                    className: "rounded-lg sm:rounded-xl border-2 border-red-200 bg-white px-3 sm:px-5 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold text-red-600 shadow-sm transition hover:border-red-300 hover:bg-red-50 active:scale-[0.98]"
                   };
                 }
                 return null;
@@ -417,95 +363,95 @@ export default function OrdersClient({
               return (
                 <div
                   key={order.id}
-                  className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-md transition hover:shadow-xl"
+                  className="overflow-hidden rounded-xl sm:rounded-2xl border border-stone-200 bg-white shadow-md transition hover:shadow-xl"
                 >
                   {/* Card Header */}
-                  <div className="border-b border-stone-200 bg-gradient-to-r from-stone-50 to-white px-6 py-5">
-                    <div className="mb-3 flex items-start justify-between">
-                      <div>
-                        <div className="text-xs font-semibold uppercase tracking-wide text-stone-500">Order</div>
-                        <div className="mt-1 text-xl font-bold text-stone-900">
+                  <div className="border-b border-stone-200 bg-gradient-to-r from-stone-50 to-white px-3 sm:px-5 py-3 sm:py-4">
+                    <div className="mb-2 sm:mb-3 flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[10px] sm:text-xs font-semibold uppercase tracking-wide text-stone-500">Order</div>
+                        <div className="mt-0.5 sm:mt-1 text-base sm:text-lg lg:text-xl font-bold text-stone-900 truncate">
                           {order.order_code ?? order.id.slice(0, 8)}
                         </div>
                       </div>
-                      <div className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold ${statusColor(order.status)}`}>
+                      <div className={`flex items-center gap-1.5 sm:gap-2 rounded-lg sm:rounded-xl border px-2 sm:px-2.5 py-1 sm:py-1.5 text-xs sm:text-sm font-semibold whitespace-nowrap ${statusColor(order.status)}`}>
                         {statusIcon(order.status)}
-                        <span>{(order.status ?? "pending").replace("_", " ")}</span>
+                        <span className="hidden xs:inline">{(order.status ?? "pending").replace("_", " ")}</span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 text-base">
-                      <span className="font-semibold text-stone-900">{order.customer_name ?? "—"}</span>
+                    <div className="flex items-center gap-2 text-sm sm:text-base">
+                      <span className="font-semibold text-stone-900 truncate">{order.customer_name ?? "—"}</span>
                       <span className="text-stone-300">•</span>
-                      <span className="text-sm text-stone-500">{time(order.created_at).split(" ")[1]}</span>
+                      <span className="text-xs sm:text-sm text-stone-500 whitespace-nowrap">{time(order.created_at).split(" ")[1]}</span>
                     </div>
                   </div>
 
                   {/* Card Body */}
-                  <div className="p-6">
-                    {/* Items Section - Emphasized */}
-                    <div className="mb-5 rounded-xl border-2 border-stone-300 bg-stone-50 p-4 shadow-sm">
-                      <div className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-stone-900">
-                        <span className="text-base">📦</span>
-                        <span>Items Ordered ({orderItems.length})</span>
+                  <div className="p-3 sm:p-5">
+                    {/* Items Section */}
+                    <div className="mb-3 sm:mb-4 rounded-lg sm:rounded-xl border-2 border-stone-300 bg-stone-50 p-3 sm:p-4">
+                      <div className="mb-2 sm:mb-3 flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-bold uppercase tracking-wide text-stone-900">
+                        <span className="text-sm sm:text-base">📦</span>
+                        <span>Items ({orderItems.length})</span>
                       </div>
-                      <div className="space-y-2">
+                      <div className="space-y-1.5 sm:space-y-2 max-h-32 sm:max-h-40 overflow-y-auto">
                         {orderItems.map((item) => (
-                          <div key={item.id} className="flex items-center justify-between text-sm">
-                            <span className="text-stone-700">
-                              <span className="font-bold text-stone-900">{item.qty}x</span>{" "}
+                          <div key={item.id} className="flex items-center justify-between text-xs sm:text-sm gap-2">
+                            <span className="text-stone-700 truncate flex-1 min-w-0">
+                              <span className="font-bold text-stone-900">{item.qty}×</span>{" "}
                               {item.product_name ?? "Unknown"}
                             </span>
-                            <span className="font-semibold text-stone-900">
+                            <span className="font-semibold text-stone-900 whitespace-nowrap text-xs sm:text-sm">
                               {peso((item.price_at_order_cents ?? 0) * (item.qty ?? 0))}
                             </span>
                           </div>
                         ))}
                         {orderItems.length === 0 && (
-                          <div className="text-sm italic text-stone-500">No items found</div>
+                          <div className="text-xs sm:text-sm italic text-stone-500 py-2">No items found</div>
                         )}
                       </div>
-                      <div className="mt-3 flex items-center justify-between border-t-2 border-stone-300 pt-3 text-base font-semibold text-stone-900">
+                      <div className="mt-2 sm:mt-3 flex items-center justify-between border-t-2 border-stone-300 pt-2 sm:pt-3 text-sm sm:text-base font-semibold text-stone-900">
                         <span>Subtotal:</span>
-                        <span>{peso(order.subtotal_cents ?? 0)}</span>
+                        <span className="text-sm sm:text-base">{peso(order.subtotal_cents ?? 0)}</span>
                       </div>
                     </div>
 
-                    {/* Location & Payment - Side by Side */}
-                    <div className="mb-5 grid grid-cols-2 gap-3">
+                    {/* Location & Payment - Stacked on Mobile, Side by Side on Larger */}
+                    <div className="mb-3 sm:mb-4 flex flex-col sm:grid sm:grid-cols-2 gap-2 sm:gap-3">
                       {/* Location */}
-                      <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-                        <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-amber-900">
+                      <div className="rounded-lg sm:rounded-xl border border-amber-200 bg-amber-50 p-2.5 sm:p-3">
+                        <div className="mb-1 flex items-center gap-1.5 text-[10px] sm:text-xs font-bold uppercase tracking-wide text-amber-900">
                           <span>📍</span>
                           <span>{String(order.fulfillment) === "delivery" ? "Delivery" : "Pickup"}</span>
                         </div>
-                        <div className="text-base font-semibold text-amber-800">{pickupLabel(order)}</div>
+                        <div className="text-xs sm:text-sm font-semibold text-amber-800 truncate">{pickupLabel(order)}</div>
                         {String(order.fulfillment) === "delivery" && order.delivery_fee_cents && order.delivery_fee_cents > 0 && (
-                          <div className="mt-2 text-xs text-amber-700">Fee: {peso(order.delivery_fee_cents)}</div>
+                          <div className="mt-1 text-[10px] sm:text-xs text-amber-700">Fee: {peso(order.delivery_fee_cents)}</div>
                         )}
                       </div>
 
                       {/* Payment */}
-                      <div className="rounded-xl border border-stone-200 bg-white p-4">
-                        <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-stone-600">
+                      <div className="rounded-lg sm:rounded-xl border border-stone-200 bg-white p-2.5 sm:p-3">
+                        <div className="mb-1 flex items-center gap-1.5 text-[10px] sm:text-xs font-bold uppercase tracking-wide text-stone-600">
                           <span>💳</span>
                           <span>Payment</span>
                         </div>
-                        <div className="text-sm font-medium text-stone-700">
+                        <div className="text-xs sm:text-sm font-medium text-stone-700 truncate">
                           {(order.payment_method ?? "").toUpperCase()}
                         </div>
-                        <div className={`mt-1 text-base font-bold ${isPaid ? "text-emerald-600" : "text-amber-700"}`}>
-                          {isPaid ? "PAID ✓" : "PENDING ⏳"}
+                        <div className={`mt-0.5 sm:mt-1 text-sm sm:text-base font-bold ${isPaid ? "text-emerald-600" : "text-amber-700"}`}>
+                          {isPaid ? "PAID ✓" : "UNPAID"}
                         </div>
                         
-                        {/* Payment action buttons for confirmed cash orders */}
+                        {/* Payment Buttons for Confirmed Cash Orders */}
                         {order.status === "confirmed" && !isPaid && (
-                          <div className="mt-3 flex gap-2">
+                          <div className="mt-2 flex gap-1.5 sm:gap-2">
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleVerifyPayment(order.id, "paid");
                               }}
-                              className="flex-1 rounded-lg bg-emerald-600 px-2 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-700"
+                              className="flex-1 rounded-md sm:rounded-lg bg-emerald-600 px-2 py-1.5 text-[10px] sm:text-xs font-semibold text-white transition hover:bg-emerald-700"
                             >
                               ✓ Paid
                             </button>
@@ -514,7 +460,7 @@ export default function OrdersClient({
                                 e.stopPropagation();
                                 handleVerifyPayment(order.id, "failed");
                               }}
-                              className="flex-1 rounded-lg border border-red-300 bg-white px-2 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-50"
+                              className="flex-1 rounded-md sm:rounded-lg border border-red-300 bg-white px-2 py-1.5 text-[10px] sm:text-xs font-semibold text-red-600 transition hover:bg-red-50"
                             >
                               ✕ Failed
                             </button>
@@ -523,14 +469,14 @@ export default function OrdersClient({
                       </div>
                     </div>
 
-                    {/* Total - Emphasized */}
-                    <div className="mb-5 rounded-xl border-2 border-amber-300 bg-gradient-to-br from-amber-50 to-yellow-50 p-5 text-center shadow-sm">
-                      <div className="text-sm font-semibold uppercase tracking-wide text-amber-900">Total</div>
-                      <div className="mt-1 text-3xl font-bold text-amber-900">{peso(order.total_cents ?? 0)}</div>
+                    {/* Total */}
+                    <div className="mb-3 sm:mb-4 rounded-lg sm:rounded-xl border-2 border-amber-300 bg-gradient-to-br from-amber-50 to-yellow-50 p-3 sm:p-4 text-center">
+                      <div className="text-[10px] sm:text-xs font-semibold uppercase tracking-wide text-amber-900">Total</div>
+                      <div className="mt-0.5 sm:mt-1 text-xl sm:text-2xl lg:text-3xl font-bold text-amber-900">{peso(order.total_cents ?? 0)}</div>
                     </div>
 
                     {/* Action Buttons */}
-                    <div className="flex gap-3">
+                    <div className="flex gap-2 sm:gap-3">
                       {primaryBtn && (
                         <button
                           onClick={(e) => {
@@ -555,13 +501,13 @@ export default function OrdersClient({
                         </button>
                       )}
                       
-                      {/* Delete Button - Always Present */}
+                      {/* Delete Button */}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           handleDeleteOrder(order);
                         }}
-                        className="rounded-xl border-2 border-stone-200 bg-white px-5 py-4 text-lg font-semibold text-red-600 shadow-sm transition hover:border-red-300 hover:bg-red-50 hover:shadow-md active:scale-[0.98]"
+                        className="rounded-lg sm:rounded-xl border-2 border-stone-200 bg-white px-2.5 sm:px-4 py-2.5 sm:py-3 text-base sm:text-lg font-semibold text-red-600 shadow-sm transition hover:border-red-300 hover:bg-red-50 active:scale-[0.98]"
                         title="Delete order"
                       >
                         🗑️
