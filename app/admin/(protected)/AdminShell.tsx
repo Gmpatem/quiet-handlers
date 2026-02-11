@@ -61,10 +61,8 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   return (
     <div className="min-h-screen bg-gradient-to-br from-stone-50 via-white to-amber-50/30">
       <div className="mx-auto grid max-w-6xl grid-cols-1 gap-4 px-4 py-6 md:grid-cols-[240px_1fr]">
-        {/* Sidebar */}
         <aside>
           <div className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
-            {/* FDS Logo Header */}
             <div className="mb-4 flex items-center gap-2 border-b border-stone-200 pb-3">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-stone-600 to-amber-900 text-xs font-bold text-white shadow-sm">
                 FDS
@@ -75,11 +73,10 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
               </div>
             </div>
 
-            {/* Main Navigation */}
             <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-stone-500">
               Navigation
             </div>
-            <nav className="grid gap-1">
+            <nav className="grid gap-1 mb-4">
               {nav.map((item) => {
                 const active =
                   item.href === "/admin"
@@ -96,8 +93,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
               })}
             </nav>
 
-            {/* Services Section */}
-            <div className="mt-4 mb-3 text-xs font-semibold uppercase tracking-wide text-stone-500">
+            <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-stone-500 border-t border-stone-200 pt-4">
               Services
             </div>
             <nav className="grid gap-1">
@@ -124,7 +120,6 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
           </div>
         </aside>
 
-        {/* Main content */}
         <main className="min-w-0">
           <div className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
             {children}
