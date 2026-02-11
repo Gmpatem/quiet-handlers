@@ -37,6 +37,15 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
     []
   );
 
+  const servicesNav = useMemo(
+    () => [
+      { href: "/admin/printing", label: "🖨️ Printing" },
+      { href: "/admin/gcash", label: "💳 GCash" },
+      { href: "/admin/deliveries", label: "🚚 Delivery" },
+    ],
+    []
+  );
+
   async function onLogout() {
     setSigningOut(true);
     try {
@@ -66,6 +75,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
               </div>
             </div>
 
+            {/* Main Navigation */}
             <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-stone-500">
               Navigation
             </div>
@@ -75,6 +85,24 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
                   item.href === "/admin"
                     ? pathname === "/admin"
                     : pathname?.startsWith(item.href);
+                return (
+                  <NavItem
+                    key={item.href}
+                    href={item.href}
+                    label={item.label}
+                    active={!!active}
+                  />
+                );
+              })}
+            </nav>
+
+            {/* Services Section */}
+            <div className="mt-4 mb-3 text-xs font-semibold uppercase tracking-wide text-stone-500">
+              Services
+            </div>
+            <nav className="grid gap-1">
+              {servicesNav.map((item) => {
+                const active = pathname?.startsWith(item.href);
                 return (
                   <NavItem
                     key={item.href}

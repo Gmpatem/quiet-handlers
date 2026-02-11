@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 
 import { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
@@ -311,28 +312,37 @@ export default function Storefront({
             >
               <Menu className="h-6 w-6" />
             </button>
-          </div>
+          </div><div className="flex gap-3 mb-4 overflow-x-auto scrollbar-hide pb-1">
 
-          {/* Service Pills Row - Full width, prominent */}
-          <div className="flex gap-3 mb-4 overflow-x-auto scrollbar-hide pb-1">
-            <a
-              href="https://forms.gle/KBhZ8Et4fqdG7g5y5"
-              target="_blank"
-              rel="noreferrer"
-              className="flex flex-shrink-0 items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-semibold text-amber-800 shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-xl active:scale-95"
-            >
-              <Printer className="h-4 w-4" />
-              <span className="whitespace-nowrap">Printing Service</span>
-            </a>
+  {/* Printing */}
+  <Link
+    href="/services/printing"
+    className="flex flex-shrink-0 items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-semibold text-amber-800 shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-xl active:scale-95"
+  >
+    <Printer className="h-4 w-4" />
+    <span className="whitespace-nowrap">Printing Service</span>
+  </Link>
 
-            <div className="flex flex-shrink-0 items-center gap-2 rounded-full bg-white/90 px-5 py-3 text-sm font-semibold text-amber-800 opacity-75 shadow-lg">
-              <span className="text-base">💰</span>
-              <span className="whitespace-nowrap">GCash Service</span>
-              <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-800">
-                SOON
-              </span>
-            </div>
-          </div>
+  {/* GCash */}
+  <Link
+    href="/services/gcash"
+    className="flex flex-shrink-0 items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-semibold text-amber-800 shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-xl active:scale-95"
+  >
+    <span className="text-base">💰</span>
+    <span className="whitespace-nowrap">GCash Service</span>
+  </Link>
+
+  {/* Delivery */}
+  <Link
+    href="/services/delivery"
+    className="flex flex-shrink-0 items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-semibold text-amber-800 shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-xl active:scale-95"
+  >
+    <span className="text-base">📦</span>
+    <span className="whitespace-nowrap">Delivery</span>
+  </Link>
+
+</div>
+
 
           {/* Category Pills - Full width scrolling, shows ALL categories with active products */}
           <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2">
@@ -366,9 +376,9 @@ export default function Storefront({
       {(pullDistance > 0 || isRefreshing) && (
         <div
           className="fixed left-0 right-0 top-0 z-30 flex items-center justify-center bg-gradient-to-b from-amber-50/95 to-white/95 backdrop-blur-sm transition-all duration-200"
-          style={{ 
-            height: `${Math.min(pullDistance, 80)}px`, 
-            opacity: pullDistance > 0 ? 1 : 0 
+          style={{
+            height: `${Math.min(pullDistance, 80)}px`,
+            opacity: pullDistance > 0 ? 1 : 0
           }}
         >
           <div className="flex flex-col items-center justify-center">
@@ -522,7 +532,7 @@ export default function Storefront({
                   <div
                     key={p.id}
                     className={`
-                      group relative overflow-hidden rounded-xl border border-stone-100 bg-white p-2 shadow-sm transition-all duration-300 
+                      group relative overflow-hidden rounded-xl border border-stone-100 bg-white p-2 shadow-sm transition-all duration-300
                       sm:p-2.5 lg:p-3
                       ${out ? "opacity-70 grayscale-20" : "hover:-translate-y-1 hover:shadow-md"}
                       ${justAdded ? "ring-2 ring-emerald-500 ring-offset-2" : ""}
@@ -545,10 +555,10 @@ export default function Storefront({
 
                       {/* Stock Badge - Shows stock quantity with color coding */}
                       <div className={`absolute right-2 top-2 rounded-lg px-1.5 py-0.5 text-xs font-semibold shadow-sm border ${
-                        out 
-                          ? 'border-red-200 bg-red-100 text-red-800' 
-                          : low 
-                            ? 'border-amber-200 bg-amber-100 text-amber-800' 
+                        out
+                          ? 'border-red-200 bg-red-100 text-red-800'
+                          : low
+                            ? 'border-amber-200 bg-amber-100 text-amber-800'
                             : 'border-emerald-200 bg-emerald-100 text-emerald-800'
                       }`}>
                         {out ? 'Out' : stock}
@@ -576,7 +586,7 @@ export default function Storefront({
                       onClick={() => add(p)}
                       disabled={out}
                       className={`
-                        mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold 
+                        mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold
                         transition-all duration-300 active:scale-95 sm:mt-2 sm:py-2 sm:text-sm lg:py-2.5
                         disabled:opacity-50 disabled:cursor-not-allowed
                         ${justAdded
@@ -615,8 +625,8 @@ export default function Storefront({
                 <Package className="mx-auto h-12 w-12 text-stone-400 sm:h-16 sm:w-16" />
                 <div className="mt-4 text-sm font-medium text-stone-900 sm:text-base">No products found</div>
                 <div className="mt-1 text-xs text-stone-600 sm:text-sm">
-                  {activeCat === ALL 
-                    ? "Check back later for new items!" 
+                  {activeCat === ALL
+                    ? "Check back later for new items!"
                     : `No active products in "${activeCat}" category`
                   }
                 </div>
@@ -723,9 +733,9 @@ export default function Storefront({
       {/* Mobile Cart Modal */}
       {showCartDetails && (
         <div className="fixed inset-0 z-50 lg:hidden">
-          <div 
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity" 
-            onClick={() => setShowCartDetails(false)} 
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity"
+            onClick={() => setShowCartDetails(false)}
           />
           <div className="absolute bottom-0 left-0 right-0 max-h-[85vh] overflow-hidden rounded-t-3xl bg-white shadow-2xl animate-in slide-in-from-bottom duration-300">
             <div className="p-5">
