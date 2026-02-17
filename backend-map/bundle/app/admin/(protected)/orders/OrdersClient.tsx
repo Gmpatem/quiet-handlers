@@ -41,15 +41,6 @@ export type OrderItemRow = {
   price_at_order_cents: number;
 };
 
-type RawOrderItem = {
-  id: string;
-  order_id: string;
-  product_id: string | null;
-  name_snapshot: string;
-  unit_price_cents: number;
-  qty: number;
-};
-
 function peso(cents: number) {
   return new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format((cents ?? 0) / 100);
 }
@@ -69,20 +60,6 @@ function time(ts: string) {
   }
 }
 
-function normalizeItems(input: any[] | null | undefined): OrderItemRow[] {
-  const arr = (input ?? []) as any[];
-  return arr.map((r) => ({
-    id: String(r.id),
-    order_id: String(r.order_id),
-    product_id: r.product_id ?? null,
-    // support BOTH shapes: old (product_name) OR real schema (name_snapshot)
-    product_name: (r.product_name ?? r.name_snapshot ?? null) as string | null,
-    qty: Number(r.qty ?? 0),
-    // support BOTH shapes: old (price_at_order_cents) OR real schema (unit_price_cents)
-    price_at_order_cents: Number(r.price_at_order_cents ?? r.unit_price_cents ?? 0),
-  }));
-}
-
 export default function OrdersClient({
   initialOrders,
   initialPayments,
@@ -95,11 +72,13 @@ export default function OrdersClient({
   const [mounted, setMounted] = useState(false);
   const [orders, setOrders] = useState<OrderRow[]>(initialOrders ?? []);
   const [payments, setPayments] = useState<PaymentRow[]>(initialPayments ?? []);
-  const [items, setItems] = useState<OrderItemRow[]>(normalizeItems(initialItems));
+  const [items, setItems] = useState<OrderItemRow[]>(initialItems ?? []);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
-  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const supabase = useMemo(() => supabaseBrowser(), []);
 
@@ -123,56 +102,6 @@ export default function OrdersClient({
 
     return result;
   }, [orders, search, statusFilter]);
-
-  // ✅ ITEMIZATION FIX: fetch order_items using REAL column names (name_snapshot, unit_price_cents)
-  useEffect(() => {
-    if (!mounted) return;
-
-    const visibleOrderIds = (filteredOrders ?? []).map((o) => o.id);
-    if (visibleOrderIds.length === 0) return;
-
-    // If we already have at least one item for visible orders, don't refetch.
-    const haveAnyForVisible = (items ?? []).some((it) => visibleOrderIds.includes(it.order_id));
-    if (haveAnyForVisible) return;
-
-    let cancelled = false;
-
-    async function loadItemsForVisibleOrders() {
-      const { data, error } = await supabase
-        .from("order_items")
-        .select("id, order_id, product_id, name_snapshot, unit_price_cents, qty")
-        .in("order_id", visibleOrderIds);
-
-      if (cancelled) return;
-
-      if (error) {
-        console.error("Failed to load order_items:", error);
-        return;
-      }
-
-      const incomingRaw = (data ?? []) as RawOrderItem[];
-      const incoming: OrderItemRow[] = incomingRaw.map((r) => ({
-        id: r.id,
-        order_id: r.order_id,
-        product_id: r.product_id,
-        product_name: r.name_snapshot ?? null,
-        qty: Number(r.qty ?? 0),
-        price_at_order_cents: Number(r.unit_price_cents ?? 0),
-      }));
-
-      setItems((prev) => {
-        const prevArr = prev ?? [];
-        const prevIds = new Set(prevArr.map((p) => p.id));
-        return [...prevArr, ...incoming.filter((x) => !prevIds.has(x.id))];
-      });
-    }
-
-    loadItemsForVisibleOrders();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [mounted, supabase, filteredOrders, items]);
 
   async function handleUpdateStatus(orderId: string, newStatus: string) {
     try {
@@ -269,19 +198,17 @@ export default function OrdersClient({
 
   async function handleDeleteOrder(order: OrderRow) {
     const orderCode = order.order_code ?? order.id.slice(0, 8);
-
-    if (
-      !confirm(
-        `⚠️ Delete order ${orderCode}?\n\nCustomer: ${order.customer_name}\nTotal: ${peso(
-          order.total_cents ?? 0
-        )}\n\nThis action cannot be undone!`
-      )
-    ) {
+    
+    if (!confirm(`⚠️ Delete order ${orderCode}?\n\nCustomer: ${order.customer_name}\nTotal: ${peso(order.total_cents ?? 0)}\n\nThis action cannot be undone!`)) {
       return;
     }
 
     try {
-      const { error } = await supabase.from("orders").delete().eq("id", order.id);
+      const { error } = await supabase
+        .from("orders")
+        .delete()
+        .eq("id", order.id);
+
       if (error) throw error;
 
       setOrders((prev) => prev.filter((o) => o.id !== order.id));
@@ -296,7 +223,9 @@ export default function OrdersClient({
   }
 
   function pickupLabel(o: OrderRow): string {
-    if (String(o.fulfillment) === "delivery") return o.delivery_location ?? "Not specified";
+    if (String(o.fulfillment) === "delivery") {
+      return o.delivery_location ?? "Not specified";
+    }
     return o.pickup_location ?? "Not specified";
   }
 
@@ -388,7 +317,9 @@ export default function OrdersClient({
           <div className="rounded-xl border-2 border-dashed border-stone-300 bg-stone-50 p-6 sm:p-8 text-center">
             <Package className="mx-auto h-10 w-10 sm:h-12 sm:w-12 text-stone-400" />
             <h3 className="mt-3 sm:mt-4 text-sm font-semibold text-stone-900">No orders found</h3>
-            <p className="mt-1 text-xs sm:text-sm text-stone-500">{search ? "Try adjusting your search" : "Orders will appear here"}</p>
+            <p className="mt-1 text-xs sm:text-sm text-stone-500">
+              {search ? "Try adjusting your search" : "Orders will appear here"}
+            </p>
           </div>
         ) : (
           <div className="grid gap-4 sm:gap-5 lg:gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -403,15 +334,13 @@ export default function OrdersClient({
                   return {
                     label: "✓ Confirm",
                     onClick: () => handleQuickConfirm(order),
-                    className:
-                      "flex-1 rounded-lg sm:rounded-xl bg-emerald-600 px-3 sm:px-6 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 active:scale-[0.98]",
+                    className: "flex-1 rounded-lg sm:rounded-xl bg-emerald-600 px-3 sm:px-6 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 active:scale-[0.98]"
                   };
                 } else if (order.status === "confirmed") {
                   return {
                     label: "✅ Confirmed",
                     onClick: null,
-                    className:
-                      "flex-1 rounded-lg sm:rounded-xl bg-stone-100 px-3 sm:px-6 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold text-stone-600 cursor-default",
+                    className: "flex-1 rounded-lg sm:rounded-xl bg-stone-100 px-3 sm:px-6 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold text-stone-600 cursor-default"
                   };
                 }
                 return null;
@@ -422,8 +351,7 @@ export default function OrdersClient({
                   return {
                     label: "✕ Cancel",
                     onClick: () => handleQuickStatusChange(order.id, "cancelled"),
-                    className:
-                      "rounded-lg sm:rounded-xl border-2 border-red-200 bg-white px-3 sm:px-5 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold text-red-600 shadow-sm transition hover:border-red-300 hover:bg-red-50 active:scale-[0.98]",
+                    className: "rounded-lg sm:rounded-xl border-2 border-red-200 bg-white px-3 sm:px-5 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold text-red-600 shadow-sm transition hover:border-red-300 hover:bg-red-50 active:scale-[0.98]"
                   };
                 }
                 return null;
@@ -451,7 +379,6 @@ export default function OrdersClient({
                         <span className="hidden xs:inline">{(order.status ?? "pending").replace("_", " ")}</span>
                       </div>
                     </div>
-
                     <div className="flex items-center gap-2 text-sm sm:text-base">
                       <span className="font-semibold text-stone-900 truncate">{order.customer_name ?? "—"}</span>
                       <span className="text-stone-300">•</span>
@@ -467,7 +394,6 @@ export default function OrdersClient({
                         <span className="text-sm sm:text-base">📦</span>
                         <span>Items ({orderItems.length})</span>
                       </div>
-
                       <div className="space-y-1.5 sm:space-y-2 max-h-32 sm:max-h-40 overflow-y-auto">
                         {orderItems.map((item) => (
                           <div key={item.id} className="flex items-center justify-between text-xs sm:text-sm gap-2">
@@ -480,14 +406,73 @@ export default function OrdersClient({
                             </span>
                           </div>
                         ))}
-
-                        {orderItems.length === 0 && <div className="text-xs sm:text-sm italic text-stone-500 py-2">No items found</div>}
+                        {orderItems.length === 0 && (
+                          <div className="text-xs sm:text-sm italic text-stone-500 py-2">No items found</div>
+                        )}
                       </div>
-
                       <div className="mt-2 sm:mt-3 flex items-center justify-between border-t-2 border-stone-300 pt-2 sm:pt-3 text-sm sm:text-base font-semibold text-stone-900">
                         <span>Subtotal:</span>
                         <span className="text-sm sm:text-base">{peso(order.subtotal_cents ?? 0)}</span>
                       </div>
+                    </div>
+
+                    {/* Location & Payment - Stacked on Mobile, Side by Side on Larger */}
+                    <div className="mb-3 sm:mb-4 flex flex-col sm:grid sm:grid-cols-2 gap-2 sm:gap-3">
+                      {/* Location */}
+                      <div className="rounded-lg sm:rounded-xl border border-amber-200 bg-amber-50 p-2.5 sm:p-3">
+                        <div className="mb-1 flex items-center gap-1.5 text-[10px] sm:text-xs font-bold uppercase tracking-wide text-amber-900">
+                          <span>📍</span>
+                          <span>{String(order.fulfillment) === "delivery" ? "Delivery" : "Pickup"}</span>
+                        </div>
+                        <div className="text-xs sm:text-sm font-semibold text-amber-800 truncate">{pickupLabel(order)}</div>
+                        {String(order.fulfillment) === "delivery" && order.delivery_fee_cents && order.delivery_fee_cents > 0 && (
+                          <div className="mt-1 text-[10px] sm:text-xs text-amber-700">Fee: {peso(order.delivery_fee_cents)}</div>
+                        )}
+                      </div>
+
+                      {/* Payment */}
+                      <div className="rounded-lg sm:rounded-xl border border-stone-200 bg-white p-2.5 sm:p-3">
+                        <div className="mb-1 flex items-center gap-1.5 text-[10px] sm:text-xs font-bold uppercase tracking-wide text-stone-600">
+                          <span>💳</span>
+                          <span>Payment</span>
+                        </div>
+                        <div className="text-xs sm:text-sm font-medium text-stone-700 truncate">
+                          {(order.payment_method ?? "").toUpperCase()}
+                        </div>
+                        <div className={`mt-0.5 sm:mt-1 text-sm sm:text-base font-bold ${isPaid ? "text-emerald-600" : "text-amber-700"}`}>
+                          {isPaid ? "PAID ✓" : "UNPAID"}
+                        </div>
+                        
+                        {/* Payment Buttons for Confirmed Cash Orders */}
+                        {order.status === "confirmed" && !isPaid && (
+                          <div className="mt-2 flex gap-1.5 sm:gap-2">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleVerifyPayment(order.id, "paid");
+                              }}
+                              className="flex-1 rounded-md sm:rounded-lg bg-emerald-600 px-2 py-1.5 text-[10px] sm:text-xs font-semibold text-white transition hover:bg-emerald-700"
+                            >
+                              ✓ Paid
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleVerifyPayment(order.id, "failed");
+                              }}
+                              className="flex-1 rounded-md sm:rounded-lg border border-red-300 bg-white px-2 py-1.5 text-[10px] sm:text-xs font-semibold text-red-600 transition hover:bg-red-50"
+                            >
+                              ✕ Failed
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Total */}
+                    <div className="mb-3 sm:mb-4 rounded-lg sm:rounded-xl border-2 border-amber-300 bg-gradient-to-br from-amber-50 to-yellow-50 p-3 sm:p-4 text-center">
+                      <div className="text-[10px] sm:text-xs font-semibold uppercase tracking-wide text-amber-900">Total</div>
+                      <div className="mt-0.5 sm:mt-1 text-xl sm:text-2xl lg:text-3xl font-bold text-amber-900">{peso(order.total_cents ?? 0)}</div>
                     </div>
 
                     {/* Action Buttons */}
@@ -503,7 +488,7 @@ export default function OrdersClient({
                           {primaryBtn.label}
                         </button>
                       )}
-
+                      
                       {secondaryBtn && (
                         <button
                           onClick={(e) => {
@@ -515,7 +500,8 @@ export default function OrdersClient({
                           {secondaryBtn.label}
                         </button>
                       )}
-
+                      
+                      {/* Delete Button */}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();

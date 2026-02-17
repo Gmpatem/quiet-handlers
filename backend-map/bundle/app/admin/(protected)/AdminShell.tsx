@@ -2,18 +2,10 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 
-function NavItem({
-  href,
-  label,
-  active,
-}: {
-  href: string;
-  label: string;
-  active: boolean;
-}) {
+function NavItem({ href, label, active }: any) {
   return (
     <Link
       href={href}
@@ -32,18 +24,14 @@ function NavItem({
 export default function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-
   const [signingOut, setSigningOut] = useState(false);
-  const [authChecked, setAuthChecked] = useState(false);
 
-  // ✅ UPDATED MAIN NAVIGATION (Reports added)
   const nav = useMemo(
     () => [
       { href: "/admin", label: "Dashboard" },
       { href: "/admin/products", label: "Products" },
       { href: "/admin/inventory-management", label: "Inventory" },
       { href: "/admin/orders", label: "Orders" },
-      { href: "/admin/reports", label: "Reports" },
       { href: "/admin/settings", label: "Settings" },
     ],
     []
@@ -58,40 +46,6 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
     []
   );
 
-  // ✅ Client guard (verified auth) – avoids relying on getSession().user
-  useEffect(() => {
-    let cancelled = false;
-
-    async function checkAuth() {
-      try {
-        const supabase = supabaseBrowser();
-
-        // This contacts Supabase Auth to validate the user (more secure than session.user from storage)
-        const { data, error } = await supabase.auth.getUser();
-
-        if (cancelled) return;
-
-        if (error || !data.user) {
-          router.replace("/admin/login");
-          router.refresh();
-          return;
-        }
-
-        setAuthChecked(true);
-      } catch {
-        if (!cancelled) {
-          router.replace("/admin/login");
-          router.refresh();
-        }
-      }
-    }
-
-    checkAuth();
-    return () => {
-      cancelled = true;
-    };
-  }, [router]);
-
   async function onLogout() {
     setSigningOut(true);
     try {
@@ -102,17 +56,6 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
     } finally {
       setSigningOut(false);
     }
-  }
-
-  // Optional: tiny loader so the UI doesn’t flash for a split second
-  if (!authChecked) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-stone-50 via-white to-amber-50/30">
-        <div className="mx-auto flex max-w-6xl items-center justify-center px-4 py-10">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-amber-700 border-t-transparent" />
-        </div>
-      </div>
-    );
   }
 
   return (
@@ -133,14 +76,12 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
             <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-stone-500">
               Navigation
             </div>
-
-            <nav className="mb-4 grid gap-1">
+            <nav className="grid gap-1 mb-4">
               {nav.map((item) => {
                 const active =
                   item.href === "/admin"
                     ? pathname === "/admin"
                     : pathname?.startsWith(item.href);
-
                 return (
                   <NavItem
                     key={item.href}
@@ -152,10 +93,9 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
               })}
             </nav>
 
-            <div className="mb-3 border-t border-stone-200 pt-4 text-xs font-semibold uppercase tracking-wide text-stone-500">
+            <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-stone-500 border-t border-stone-200 pt-4">
               Services
             </div>
-
             <nav className="grid gap-1">
               {servicesNav.map((item) => {
                 const active = pathname?.startsWith(item.href);

@@ -1,0 +1,113 @@
+## Project Root
+
+Name                 Mode
+----                 ----
+.git                 d--h-
+.github              d----
+.next                d----
+.vscode              d----
+app                  d----
+backend-map          d----
+components           d----
+lib                  d----
+node_modules         d----
+public               d----
+supabase             d----
+types                d----
+.env.local           -a---
+.gitignore           -a---
+components.json      -a---
+diagonistics .txt    -a---
+eslint.config.mjs    -a---
+next-env.d.ts        -a---
+next.config.mjs      -a---
+package-lock.json    -a---
+package.json         -a---
+postcss.config.mjs   -a---
+README.md            -a---
+sups base schema.txt -a---
+tailwind.config.ts   -a---
+tsconfig.json        -a---
+
+
+
+## Key Folders (app/pages/lib/components/server/api)
+
+### app
+app\admin\(protected)\AdminShell.tsx
+app\admin\(protected)\DashboardLiveRefresh.tsx
+app\admin\(protected)\deliveries\DeliveryAdminClient.tsx
+app\admin\(protected)\deliveries\page.tsx
+app\admin\(protected)\expenses\actions.ts
+app\admin\(protected)\expenses\page.tsx
+app\admin\(protected)\gcash\GCashAdminClient.tsx
+app\admin\(protected)\gcash\page.tsx
+app\admin\(protected)\inventory-management\InventoryManagementClient.tsx
+app\admin\(protected)\inventory-management\page.tsx
+app\admin\(protected)\inventory-management\receive.zip
+app\admin\(protected)\inventory-management\receive\page.tsx
+app\admin\(protected)\inventory-management\receive\ReceiveInventoryClient.tsx
+app\admin\(protected)\layout.tsx
+app\admin\(protected)\orders\OrdersClient.tsx
+app\admin\(protected)\orders\page.tsx
+app\admin\(protected)\orders\RealtimeAdminRefresh.tsx
+app\admin\(protected)\page.tsx
+app\admin\(protected)\printing\page.tsx
+app\admin\(protected)\printing\PrintingAdminClient.tsx
+app\admin\(protected)\products\page.tsx
+app\admin\(protected)\products\ProductForm.tsx
+app\admin\(protected)\products\ProductsClient.tsx
+app\admin\(protected)\products\ReceiveBatchForm.tsx
+app\admin\(protected)\settings\page.tsx
+app\admin\(protected)\settings\SettingsClient.tsx
+app\admin\login\page.tsx
+app\checkout\CheckoutClient.tsx
+app\checkout\page.tsx
+app\checkout\page.tsx.backup
+app\globals.css
+app\layout.tsx
+app\order\success\[code]\page.tsx
+app\order\success\[code]\SuggestionBox.tsx
+app\page.tsx
+app\services\delivery\actions.ts
+app\services\delivery\page.tsx
+app\services\gcash\actions.ts
+app\services\gcash\page.tsx
+app\services\printing\actions.ts
+app\services\printing\page.tsx
+
+
+### lib
+lib\cart.ts
+lib\gcash\calculations.ts
+lib\money.ts
+lib\publicSettings.ts
+lib\settings.ts
+lib\supabase.ts
+lib\supabase\browser.ts
+lib\supabase\server.ts
+lib\supabaseServer.ts
+lib\types.ts
+lib\utils.ts
+
+
+### components
+components\admin\AddExpenseForm.tsx
+components\admin\ExpenseTable.tsx
+components\AuthHeal.tsx
+components\AuthSessionGuard.tsx
+components\Catalog.tsx
+components\delivery\DeliveryRequestClient.tsx
+components\gcash\GCashServiceClient.tsx
+components\printing\PrintingServiceClient.tsx
+components\store\Storefront.tsx
+components\ui\badge.tsx
+components\ui\button.tsx
+components\ui\card.tsx
+components\ui\separator.tsx
+components\ui\skeleton.tsx
+
+
+### supabase
+supabase\migrations\gcash_requests.sql
+
