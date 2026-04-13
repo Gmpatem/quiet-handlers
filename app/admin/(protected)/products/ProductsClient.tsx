@@ -75,80 +75,80 @@ export default function ProductsClient({ initialProducts }: { initialProducts: P
 
   return (
     <div>
-      <div className="flex items-start justify-between gap-4">
+      {/* Header - Pack G: Consistent styling with stone theme */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold">Products</h1>
-          <p className="mt-1 text-sm text-slate-600">
-            Create, edit, activate/deactivate, manage stock, and upload product images.
+          <h1 className="text-xl font-semibold text-stone-900">Products</h1>
+          <p className="mt-1 text-sm text-stone-600">
+            Manage catalog, pricing, stock levels, and product badges.
           </p>
         </div>
 
-        <button
-          onClick={onNew}
-          className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
-        >
-          + New Product
-        </button>
-        
-        <Link
-          href="/admin/inventory"
-          className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50"
-        >
-          Inventory Manager →
-        </Link>
-        
-        <Link
-          href="/admin/inventory"
-          className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50"
-        >
-          Inventory Manager →
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/admin/inventory-management"
+            className="rounded-xl border border-stone-200 bg-white px-4 py-2 text-sm font-medium text-stone-700 transition hover:border-amber-700 hover:bg-amber-50"
+          >
+            📊 Inventory →
+          </Link>
+          <button
+            onClick={onNew}
+            className="rounded-xl bg-gradient-to-r from-amber-700 to-amber-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:from-amber-800 hover:to-amber-950"
+          >
+            + New Product
+          </button>
+        </div>
       </div>
 
+      {/* Search & Filters - Pack G: Improved styling */}
       <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex-1">
+        <div className="relative flex-1 max-w-md">
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search name or category..."
-            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2"
+            placeholder="Search products by name or category..."
+            className="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm outline-none transition focus:border-amber-700 focus:ring-2 focus:ring-amber-700/20"
           />
         </div>
 
-        <label className="flex items-center gap-2 text-sm text-slate-700">
+        <label className="flex items-center gap-2 rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm text-stone-700 cursor-pointer transition hover:border-amber-700 hover:bg-amber-50">
           <input
             type="checkbox"
             checked={showInactive}
             onChange={(e) => setShowInactive(e.target.checked)}
+            className="rounded border-stone-300 text-amber-700 focus:ring-amber-700"
           />
-          Show inactive
+          Show inactive products
         </label>
       </div>
 
+      {/* Loading State - Pack G: Better feedback */}
       {isPending && (
-        <div className="mt-4 rounded-xl bg-slate-50 p-3 text-sm text-slate-600">
-          Working...
+        <div className="mt-4 flex items-center gap-2 rounded-xl bg-amber-50 p-3 text-sm text-amber-800">
+          <div className="h-4 w-4 animate-spin rounded-full border-2 border-amber-700 border-t-transparent" />
+          Updating products...
         </div>
       )}
 
       <div className="mt-6 space-y-6">
+        {/* Product Groups - Pack G: Consistent stone theme */}
         {grouped.map(([category, items]) => (
-          <div key={category} className="rounded-2xl border border-slate-200">
-            <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3">
-              <div className="font-semibold">{category}</div>
-              <div className="text-sm text-slate-600">{items.length} item(s)</div>
+          <div key={category} className="rounded-2xl border border-stone-200 bg-white shadow-sm">
+            <div className="flex items-center justify-between border-b border-stone-200 bg-gradient-to-r from-stone-50 to-white px-4 py-3">
+              <div className="font-semibold text-stone-900">{category}</div>
+              <div className="text-sm text-stone-500">{items.length} product{items.length !== 1 ? 's' : ''}</div>
             </div>
 
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="text-left text-slate-500">
-                  <tr className="border-b">
-                    <th className="py-2 px-4">Product</th>
-                    <th className="py-2 px-4">Price</th>
-                    <th className="py-2 px-4">Cost</th>
-                    <th className="py-2 px-4">Stock</th>
-                    <th className="py-2 px-4">Active</th>
-                    <th className="py-2 px-4 text-right">Actions</th>
+                <thead className="text-left text-stone-500">
+                  <tr className="border-b border-stone-200">
+                    <th className="py-3 px-4 font-medium">Product</th>
+                    <th className="py-3 px-4 font-medium">Price</th>
+                    <th className="py-3 px-4 font-medium">Cost</th>
+                    <th className="py-3 px-4 font-medium">Stock</th>
+                    <th className="py-3 px-4 font-medium">Status</th>
+                    <th className="py-3 px-4 text-right font-medium">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -156,45 +156,58 @@ export default function ProductsClient({ initialProducts }: { initialProducts: P
                     <tr key={p.id} className="border-b last:border-b-0">
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 overflow-hidden rounded-xl border border-slate-200 bg-white">
+                          <div className="h-12 w-12 overflow-hidden rounded-xl border border-stone-200 bg-stone-50">
                             {p.photo_url ? (
                               // eslint-disable-next-line @next/next/no-img-element
                               <img src={p.photo_url} alt={p.name} className="h-full w-full object-cover" />
                             ) : (
-                              <div className="grid h-full w-full place-items-center text-xs text-slate-400">No img</div>
+                              <div className="grid h-full w-full place-items-center text-xs text-stone-400">No img</div>
                             )}
                           </div>
                           <div>
-                            <div className="font-medium text-slate-900">{p.name}</div>
-                            <div className="text-xs text-slate-500">{p.category ?? "Uncategorized"}</div>
+                            <div className="flex items-center gap-2">
+                              <div className="font-medium text-stone-900">{p.name}</div>
+                              {p.badge_text && (
+                                <span className="rounded-full bg-gradient-to-r from-amber-500 to-amber-600 px-2 py-0.5 text-xs font-bold text-white shadow-sm">
+                                  {p.badge_text}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-stone-500">{p.category ?? "Uncategorized"}</div>
                           </div>
                         </div>
                       </td>
-                      <td className="py-3 px-4">{peso(p.price_cents)}</td>
-                      <td className="py-3 px-4">{peso(p.cost_cents)}</td>
-                      <td className="py-3 px-4">{p.stock_qty}</td>
+                      <td className="py-3 px-4 font-medium text-stone-900">{peso(p.price_cents)}</td>
+                      <td className="py-3 px-4 text-stone-600">{peso(p.cost_cents)}</td>
+                      <td className="py-3 px-4">
+                        <span className={`font-medium ${p.stock_qty === 0 ? 'text-red-600' : p.stock_qty <= 5 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                          {p.stock_qty}
+                        </span>
+                      </td>
                       <td className="py-3 px-4">
                         <button
                           onClick={() => onToggleActive(p)}
                           className={[
-                            "rounded-full px-3 py-1 text-xs font-semibold",
-                            p.is_active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600",
+                            "rounded-full px-3 py-1 text-xs font-semibold transition",
+                            p.is_active 
+                              ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200" 
+                              : "bg-stone-100 text-stone-500 hover:bg-stone-200",
                           ].join(" ")}
                         >
-                          {p.is_active ? "Active" : "Inactive"}
+                          {p.is_active ? "● Active" : "○ Inactive"}
                         </button>
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex justify-end gap-2">
                           <button
                             onClick={() => onEdit(p)}
-                            className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm hover:bg-slate-50"
+                            className="rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-sm font-medium text-stone-700 transition hover:border-amber-700 hover:bg-amber-50"
                           >
                             Edit
                           </button>
                           <button
                             onClick={() => onDelete(p)}
-                            className="rounded-xl border border-red-200 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50"
+                            className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-sm font-medium text-red-600 transition hover:bg-red-50"
                           >
                             Delete
                           </button>
@@ -203,10 +216,15 @@ export default function ProductsClient({ initialProducts }: { initialProducts: P
                     </tr>
                   ))}
 
+                  {/* Empty State - Pack G */}
                   {!items.length && (
                     <tr>
-                      <td colSpan={6} className="px-4 py-6 text-slate-600">
-                        No products.
+                      <td colSpan={6} className="px-4 py-8 text-center">
+                        <div className="text-stone-400 text-4xl mb-2">📦</div>
+                        <p className="text-stone-600 font-medium">No products in this category</p>
+                        <p className="text-sm text-stone-500 mt-1">
+                          {query ? 'Try adjusting your search' : 'Add a new product to get started'}
+                        </p>
                       </td>
                     </tr>
                   )}
@@ -216,9 +234,24 @@ export default function ProductsClient({ initialProducts }: { initialProducts: P
           </div>
         ))}
 
+        {/* Global Empty State - Pack G */}
         {!grouped.length && (
-          <div className="rounded-2xl border border-slate-200 p-6 text-slate-600">
-            No products found.
+          <div className="rounded-2xl border-2 border-dashed border-stone-300 bg-stone-50 p-8 text-center">
+            <div className="text-stone-400 text-5xl mb-3">🛍️</div>
+            <h3 className="text-lg font-semibold text-stone-900">No products found</h3>
+            <p className="text-stone-600 mt-2 max-w-md mx-auto">
+              {query 
+                ? 'No products match your search. Try different keywords or clear the filter.' 
+                : 'Your catalog is empty. Add your first product to start selling.'}
+            </p>
+            {!query && (
+              <button
+                onClick={onNew}
+                className="mt-4 rounded-xl bg-gradient-to-r from-amber-700 to-amber-900 px-6 py-2.5 text-sm font-medium text-white shadow-sm transition hover:from-amber-800 hover:to-amber-950"
+              >
+                + Add First Product
+              </button>
+            )}
           </div>
         )}
       </div>

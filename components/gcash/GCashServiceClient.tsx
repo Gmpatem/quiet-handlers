@@ -1,14 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import { Copy, Upload, CheckCircle, ArrowLeft, Banknote } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import {
   GCASH_CONFIG,
   TransactionType,
   calculateTotalAmount,
-  validateAmount,
   formatCurrency,
   formatGCashNumber,
   copyToClipboard,
@@ -16,12 +14,7 @@ import {
   getSuccessMessage,
   type GCashCalculation,
 } from '@/lib/gcash/calculations';
-
-// Initialize Supabase client
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+import { validateAmount, validateName, validatePhilippineMobileNumber } from '@/lib/validation';
 
 export default function GCashServiceClient() {
   const router = useRouter();
@@ -79,24 +72,29 @@ export default function GCashServiceClient() {
     }
   };
 
-  // Handle form submission
+  // Handle form submission - using server action
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
     const numAmount = parseFloat(amount);
-    const validation = validateAmount(numAmount);
-    if (!validation.isValid) {
-      setError(validation.error || 'Invalid amount');
+    
+    // Validate using shared utilities
+    const amountValidation = validateAmount(numAmount, GCASH_CONFIG.MINIMUM_AMOUNT, 50000);
+    if (!amountValidation.isValid) {
+      setError(amountValidation.error || 'Invalid amount');
       return;
     }
 
-    if (!studentName.trim()) {
-      setError('Please enter your name');
+    const nameValidation = validateName(studentName);
+    if (!nameValidation.isValid) {
+      setError(nameValidation.error);
       return;
     }
-    if (!studentContact.trim()) {
-      setError('Please enter your GCash number');
+
+    const contactValidation = validatePhilippineMobileNumber(studentContact);
+    if (!contactValidation.isValid) {
+      setError(contactValidation.error);
       return;
     }
 
@@ -108,37 +106,30 @@ export default function GCashServiceClient() {
     setIsSubmitting(true);
 
     try {
-      let proofUrl: string | null = null;
-
-      if (transactionType === 'cash_out' && paymentProof) {
-        const fileName = `${Date.now()}_${paymentProof.name}`;
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('gcash-proofs')
-          .upload(fileName, paymentProof);
-
-        if (uploadError) throw uploadError;
-
-        const { data: urlData } = supabase.storage
-          .from('gcash-proofs')
-          .getPublicUrl(fileName);
-
-        proofUrl = urlData.publicUrl;
+      const calc = calculateTotalAmount(numAmount);
+      
+      // Import and use server action
+      const { submitCompleteGCashRequest } = await import('@/app/services/gcash/actions');
+      
+      // Build FormData for server action
+      const formData = new FormData();
+      formData.append('studentName', studentName.trim());
+      formData.append('studentContact', studentContact.trim());
+      formData.append('transactionType', transactionType);
+      formData.append('amount', calc.requestedAmount.toString());
+      formData.append('serviceFee', calc.serviceFee.toString());
+      formData.append('totalAmount', calc.totalAmount.toString());
+      
+      if (paymentProof) {
+        formData.append('paymentProof', paymentProof);
       }
 
-      const calc = calculateTotalAmount(numAmount);
-      const { error: insertError } = await supabase
-        .from('gcash_transactions')
-        .insert({
-          transaction_type: transactionType,
-          requested_amount: calc.requestedAmount,
-          service_fee: calc.serviceFee,
-          total_amount: calc.totalAmount,
-          student_name: studentName.trim(),
-          student_contact: studentContact.trim(),
-          payment_proof_url: proofUrl,
-        });
+      const result = await submitCompleteGCashRequest(formData);
 
-      if (insertError) throw insertError;
+      if (!result.success) {
+        setError(result.error || 'Failed to submit request');
+        return;
+      }
 
       setSuccessMessage(getSuccessMessage());
       setShowSuccess(true);

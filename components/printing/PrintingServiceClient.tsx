@@ -24,10 +24,13 @@ export default function PrintingServiceClient() {
     if (savedName) setName(savedName);
   }, []);
 
+  // Pricing per business requirements:
+  // - Black & White: ₱3 per page
+  // - Color: ₱5 per page
   const PRICING = {
-    print: { bw: 3, color: 15 },
-    photocopy: { bw: 2, color: 10 },
-    scan: { bw: 5, color: 10 },
+    print: { bw: 3, color: 5 },
+    photocopy: { bw: 2, color: 5 },
+    scan: { bw: 3, color: 5 },
   };
 
   const calculateTotal = () => {

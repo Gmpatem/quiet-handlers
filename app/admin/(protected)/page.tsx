@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { supabaseServer } from "@/lib/supabaseServer";
 import DashboardLiveRefresh from "./DashboardLiveRefresh";
+import DebtorsSummary from "./DebtorsSummary";
 
 function peso(cents: number) {
   return new Intl.NumberFormat("en-PH", {
@@ -142,28 +143,55 @@ export default async function AdminDashboardPage() {
 
   if (lowErr) console.error("low stock error", lowErr);
 
+  // Service requests pending counts
+  const { data: printingPending, error: printingErr } = await supabase
+    .from("printing_requests")
+    .select("status")
+    .in("status", ["pending", "processing"]);
+  if (printingErr) console.error("printing pending error", printingErr);
+
+  const { data: gcashPending, error: gcashErr } = await supabase
+    .from("gcash_requests")
+    .select("status")
+    .in("status", ["pending", "processing"]);
+  if (gcashErr) console.error("gcash pending error", gcashErr);
+
+  const { data: deliveryPending, error: deliveryErr } = await supabase
+    .from("delivery_requests")
+    .select("status")
+    .in("status", ["pending", "processing", "out_for_delivery"]);
+  if (deliveryErr) console.error("delivery pending error", deliveryErr);
+
+  const servicePending = {
+    printing: (printingPending ?? []).length,
+    gcash: (gcashPending ?? []).length,
+    delivery: (deliveryPending ?? []).length,
+    total: 0
+  };
+  servicePending.total = servicePending.printing + servicePending.gcash + servicePending.delivery;
+
   return (
     <div>
       <DashboardLiveRefresh />
 
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold text-stone-900">Dashboard</h1>
-          <p className="mt-1 text-sm text-stone-600">Quick pulse of FDS operations.</p>
+          <h1 className="text-xl font-semibold text-stone-900">Control Room</h1>
+          <p className="mt-1 text-sm text-stone-600">Quick pulse of FDS operations and shortcuts to key workflows.</p>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="flex flex-wrap gap-2">
           <Link
             href="/admin/orders"
             className="rounded-xl border border-stone-200 px-3 py-2 text-sm font-medium text-stone-700 transition hover:border-amber-700 hover:bg-amber-50 text-center"
           >
-            View Orders
+            📦 Orders
           </Link>
           <Link
-            href="/admin/products"
-            className="rounded-xl border border-stone-200 px-3 py-2 text-sm font-medium text-stone-700 transition hover:border-amber-700 hover:bg-amber-50 text-center"
+            href="/admin/debtors"
+            className="rounded-xl border border-purple-200 px-3 py-2 text-sm font-medium text-purple-700 transition hover:border-purple-700 hover:bg-purple-50 text-center"
           >
-            Manage Products
+            💰 Debtors
           </Link>
         </div>
       </div>
@@ -318,7 +346,57 @@ export default async function AdminDashboardPage() {
         </div>
       </div>
 
-      <div className="mt-6 grid gap-3 sm:grid-cols-3">
+      {/* Service Requests Overview */}
+      <div className="mt-6 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div className="font-semibold text-stone-900">Service Requests Overview</div>
+          {servicePending.total > 0 && (
+            <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">
+              {servicePending.total} pending
+            </span>
+          )}
+        </div>
+        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+          <Link href="/admin/printing" className="rounded-xl border border-stone-200 bg-stone-50 p-3 transition hover:border-amber-700 hover:bg-amber-50">
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-semibold uppercase tracking-wide text-stone-500">Printing</div>
+              {servicePending.printing > 0 && (
+                <span className="rounded-full bg-amber-600 px-2 py-0.5 text-xs font-semibold text-white">
+                  {servicePending.printing}
+                </span>
+              )}
+            </div>
+            <div className="mt-1 text-sm text-stone-600">Print, copy & scan</div>
+          </Link>
+          <Link href="/admin/gcash" className="rounded-xl border border-stone-200 bg-stone-50 p-3 transition hover:border-amber-700 hover:bg-amber-50">
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-semibold uppercase tracking-wide text-stone-500">GCash</div>
+              {servicePending.gcash > 0 && (
+                <span className="rounded-full bg-amber-600 px-2 py-0.5 text-xs font-semibold text-white">
+                  {servicePending.gcash}
+                </span>
+              )}
+            </div>
+            <div className="mt-1 text-sm text-stone-600">Cash in & out</div>
+          </Link>
+          <Link href="/admin/deliveries" className="rounded-xl border border-stone-200 bg-stone-50 p-3 transition hover:border-amber-700 hover:bg-amber-50">
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-semibold uppercase tracking-wide text-stone-500">Delivery</div>
+              {servicePending.delivery > 0 && (
+                <span className="rounded-full bg-amber-600 px-2 py-0.5 text-xs font-semibold text-white">
+                  {servicePending.delivery}
+                </span>
+              )}
+            </div>
+            <div className="mt-1 text-sm text-stone-600">Off-campus delivery</div>
+          </Link>
+        </div>
+      </div>
+
+      {/* Credit / Debtors Summary (D2) */}
+      <DebtorsSummary />
+
+      <div className="mt-6 grid gap-3 sm:grid-cols-4">
         <Link href="/admin/products" className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm transition hover:border-amber-700 hover:bg-amber-50">
           <div className="font-semibold text-stone-900">Products</div>
           <div className="text-sm text-stone-600">Inventory and pricing</div>
@@ -326,6 +404,10 @@ export default async function AdminDashboardPage() {
         <Link href="/admin/orders" className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm transition hover:border-amber-700 hover:bg-amber-50">
           <div className="font-semibold text-stone-900">Orders</div>
           <div className="text-sm text-stone-600">Workflow and payments</div>
+        </Link>
+        <Link href="/admin/offers" className="rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white p-4 shadow-sm transition hover:border-amber-700 hover:bg-amber-50">
+          <div className="font-semibold text-stone-900">Offers</div>
+          <div className="text-sm text-stone-600">Promotions & deals</div>
         </Link>
         <Link href="/admin/settings" className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm transition hover:border-amber-700 hover:bg-amber-50">
           <div className="font-semibold text-stone-900">Settings</div>

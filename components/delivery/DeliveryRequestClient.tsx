@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { supabaseBrowser } from "@/lib/supabase/browser";
 import {
   Truck,
   ShoppingBag,
@@ -15,6 +14,7 @@ import {
   ChevronRight,
   CreditCard,
 } from "lucide-react";
+import { validateName, validatePhilippineMobileNumber, validateItemDescription, validateImageFile } from "@/lib/validation";
 
 const DELIVERY_FEE = 50;
 
@@ -28,25 +28,18 @@ export default function DeliveryRequestClient() {
   const [paymentMethod, setPaymentMethod] = useState<"prepaid" | "cod">("cod");
   const [paymentProof, setPaymentProof] = useState<File | null>(null);
   const [paymentProofPreview, setPaymentProofPreview] = useState<string | null>(null);
-
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
-  const supabase = supabaseBrowser();
-
-  // Handle image capture/upload
+  // Handle image capture/upload with shared validation
   const handleImageCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith("image/")) {
-      setError("Please select an image");
-      return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      setError("Image must be under 5MB");
+    const validation = validateImageFile(file, false, 5);
+    if (!validation.isValid) {
+      setError(validation.error);
       return;
     }
 
@@ -60,55 +53,63 @@ export default function DeliveryRequestClient() {
     reader.readAsDataURL(file);
   };
 
-  // Upload to Supabase
-  const uploadPaymentProof = async (file: File): Promise<string> => {
-    const fileExt = file.name.split(".").pop();
-    const fileName = `${Date.now()}.${fileExt}`;
-
-    const { error } = await supabase.storage
-      .from("delivery-proofs")
-      .upload(fileName, file);
-
-    if (error) throw error;
-
-    const { data: urlData } = supabase.storage
-      .from("delivery-proofs")
-      .getPublicUrl(fileName);
-
-    return urlData.publicUrl;
-  };
-
-  // Submit form
+  // Submit form using server action
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
 
-    try {
-      if (!formData.student_name.trim()) throw new Error("Enter your name");
-      if (!formData.student_contact.trim()) throw new Error("Enter your contact");
-      if (!formData.item_description.trim()) throw new Error("What do you want to buy?");
-      if (paymentMethod === "prepaid" && !paymentProof) throw new Error("Upload payment proof");
+    // Client-side validation using shared utilities
+    const nameValidation = validateName(formData.student_name);
+    if (!nameValidation.isValid) {
+      setError(nameValidation.error);
+      setLoading(false);
+      return;
+    }
 
-      let paymentProofUrl = null;
-      if (paymentMethod === "prepaid" && paymentProof) {
-        paymentProofUrl = await uploadPaymentProof(paymentProof);
+    const contactValidation = validatePhilippineMobileNumber(formData.student_contact);
+    if (!contactValidation.isValid) {
+      setError(contactValidation.error);
+      setLoading(false);
+      return;
+    }
+
+    const descValidation = validateItemDescription(formData.item_description);
+    if (!descValidation.isValid) {
+      setError(descValidation.error);
+      setLoading(false);
+      return;
+    }
+
+    const proofValidation = validateImageFile(paymentProof, paymentMethod === "prepaid", 5);
+    if (!proofValidation.isValid) {
+      setError(proofValidation.error);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      // Import server action dynamically
+      const { submitCompleteDeliveryRequest } = await import('@/app/services/delivery/actions');
+      
+      // Build FormData for server action
+      const submitFormData = new FormData();
+      submitFormData.append('studentName', formData.student_name.trim());
+      submitFormData.append('studentContact', formData.student_contact.trim());
+      submitFormData.append('itemDescription', formData.item_description.trim());
+      submitFormData.append('paymentMethod', paymentMethod);
+      submitFormData.append('deliveryFee', DELIVERY_FEE.toString());
+      
+      if (paymentProof) {
+        submitFormData.append('paymentProof', paymentProof);
       }
 
-      const { error: insertError } = await supabase
-        .from("delivery_requests")
-        .insert({
-          student_name: formData.student_name.trim(),
-          student_contact: formData.student_contact.trim(),
-          item_description: formData.item_description.trim(),
-          store_location: null,
-          payment_method: paymentMethod,
-          delivery_fee: DELIVERY_FEE,
-          payment_proof_url: paymentProofUrl,
-          payment_status: paymentMethod === "prepaid" ? "paid" : "unpaid",
-        });
+      const result = await submitCompleteDeliveryRequest(submitFormData);
 
-      if (insertError) throw insertError;
+      if (!result.success) {
+        setError(result.error || "Failed to submit. Try again.");
+        return;
+      }
 
       setSuccess(true);
       

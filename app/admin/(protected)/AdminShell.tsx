@@ -36,24 +36,39 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   const [signingOut, setSigningOut] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
 
-  // ✅ UPDATED MAIN NAVIGATION (Reports added)
-  const nav = useMemo(
+  // ✅ PACK F: CLEAN NAVIGATION STRUCTURE
+  // Grouped by operational workflow for better discoverability
+  const mainNav = useMemo(
     () => [
-      { href: "/admin", label: "Dashboard" },
-      { href: "/admin/products", label: "Products" },
-      { href: "/admin/inventory-management", label: "Inventory" },
-      { href: "/admin/orders", label: "Orders" },
-      { href: "/admin/reports", label: "Reports" },
-      { href: "/admin/settings", label: "Settings" },
+      { href: "/admin", label: "Dashboard", icon: "🏠" },
+      { href: "/admin/orders", label: "Orders", icon: "📦" },
+      { href: "/admin/debtors", label: "Debtors", icon: "💰" },
+    ],
+    []
+  );
+
+  const catalogNav = useMemo(
+    () => [
+      { href: "/admin/products", label: "Products", icon: "🛍️" },
+      { href: "/admin/inventory-management", label: "Inventory", icon: "📊" },
+      { href: "/admin/offers", label: "Offers", icon: "🎁" },
     ],
     []
   );
 
   const servicesNav = useMemo(
     () => [
-      { href: "/admin/printing", label: "🖨️ Printing" },
-      { href: "/admin/gcash", label: "💳 GCash" },
-      { href: "/admin/deliveries", label: "🚚 Delivery" },
+      { href: "/admin/printing", label: "Printing", icon: "🖨️" },
+      { href: "/admin/gcash", label: "GCash", icon: "💳" },
+      { href: "/admin/deliveries", label: "Delivery", icon: "🚚" },
+    ],
+    []
+  );
+
+  const adminNav = useMemo(
+    () => [
+      { href: "/admin/reports", label: "Reports", icon: "📈" },
+      { href: "/admin/settings", label: "Settings", icon: "⚙️" },
     ],
     []
   );
@@ -130,40 +145,75 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
               </div>
             </div>
 
-            <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-stone-500">
-              Navigation
+            {/* Main Operations */}
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">
+              Operations
             </div>
-
             <nav className="mb-4 grid gap-1">
-              {nav.map((item) => {
+              {mainNav.map((item) => {
                 const active =
                   item.href === "/admin"
                     ? pathname === "/admin"
                     : pathname?.startsWith(item.href);
-
                 return (
                   <NavItem
                     key={item.href}
                     href={item.href}
-                    label={item.label}
+                    label={`${item.icon} ${item.label}`}
                     active={!!active}
                   />
                 );
               })}
             </nav>
 
-            <div className="mb-3 border-t border-stone-200 pt-4 text-xs font-semibold uppercase tracking-wide text-stone-500">
+            {/* Catalog & Merchandising */}
+            <div className="mb-2 border-t border-stone-200 pt-3 text-xs font-semibold uppercase tracking-wide text-stone-500">
+              Catalog
+            </div>
+            <nav className="mb-4 grid gap-1">
+              {catalogNav.map((item) => {
+                const active = pathname?.startsWith(item.href);
+                return (
+                  <NavItem
+                    key={item.href}
+                    href={item.href}
+                    label={`${item.icon} ${item.label}`}
+                    active={!!active}
+                  />
+                );
+              })}
+            </nav>
+
+            {/* Services */}
+            <div className="mb-2 border-t border-stone-200 pt-3 text-xs font-semibold uppercase tracking-wide text-stone-500">
               Services
             </div>
-
-            <nav className="grid gap-1">
+            <nav className="mb-4 grid gap-1">
               {servicesNav.map((item) => {
                 const active = pathname?.startsWith(item.href);
                 return (
                   <NavItem
                     key={item.href}
                     href={item.href}
-                    label={item.label}
+                    label={`${item.icon} ${item.label}`}
+                    active={!!active}
+                  />
+                );
+              })}
+            </nav>
+
+            {/* Admin */}
+            <div className="mb-2 border-t border-stone-200 pt-3 text-xs font-semibold uppercase tracking-wide text-stone-500">
+              Admin
+            </div>
+            <nav className="grid gap-1">
+              {adminNav.map((item) => {
+                const active = pathname?.startsWith(item.href);
+                return (
+                  <NavItem
+                    key={item.href}
+                    href={item.href}
+                    label={`${item.icon} ${item.label}`}
                     active={!!active}
                   />
                 );

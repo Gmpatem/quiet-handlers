@@ -271,3 +271,56 @@ export async function submitCompletePrintingRequest(formData: FormData): Promise
     return { success: false, error: 'Failed to submit request' };
   }
 }
+
+/**
+ * Update printing request status and notes (admin use)
+ */
+export async function updatePrintingRequest(
+  requestId: string,
+  updates: {
+    status?: 'pending' | 'processing' | 'ready' | 'completed' | 'cancelled';
+    admin_notes?: string;
+  }
+): Promise<ActionResult> {
+  try {
+    const supabase = await supabaseServer();
+
+    // Verify user is authenticated
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    // Prepare update data
+    const updateData: any = {
+      updated_at: new Date().toISOString()
+    };
+
+    if (updates.status) {
+      updateData.status = updates.status;
+    }
+
+    if (updates.admin_notes !== undefined) {
+      updateData.admin_notes = updates.admin_notes.trim() || null;
+    }
+
+    // Update request
+    const { error: updateError } = await supabase
+      .from('printing_requests')
+      .update(updateData)
+      .eq('id', requestId);
+
+    if (updateError) {
+      console.error('Update request error:', updateError);
+      return { success: false, error: 'Failed to update request' };
+    }
+
+    // Revalidate admin pages
+    revalidatePath('/admin/printing');
+
+    return { success: true };
+  } catch (error) {
+    console.error('Update printing request error:', error);
+    return { success: false, error: 'Failed to update request' };
+  }
+}

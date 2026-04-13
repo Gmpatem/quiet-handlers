@@ -458,6 +458,114 @@ export type Database = {
           },
         ]
       }
+      offers: {
+        Row: {
+          id: string
+          name: string
+          type: string
+          status: string
+          description: string | null
+          badge_text: string | null
+          is_active: boolean
+          start_at: string | null
+          end_at: string | null
+          priority: number
+          visibility_scope: string
+          is_featured: boolean
+          config: Json
+          product_badge_text: string | null
+          product_badge_variant: string | null
+          product_badge_priority: number
+          created_at: string
+          updated_at: string
+          created_by: string | null
+        }
+        Insert: {
+          id?: string
+          name: string
+          type: string
+          status?: string
+          description?: string | null
+          badge_text?: string | null
+          is_active?: boolean
+          start_at?: string | null
+          end_at?: string | null
+          priority?: number
+          visibility_scope?: string
+          is_featured?: boolean
+          config?: Json
+          product_badge_text?: string | null
+          product_badge_variant?: string | null
+          product_badge_priority?: number
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+        }
+        Update: {
+          id?: string
+          name?: string
+          type?: string
+          status?: string
+          description?: string | null
+          badge_text?: string | null
+          is_active?: boolean
+          start_at?: string | null
+          end_at?: string | null
+          priority?: number
+          visibility_scope?: string
+          is_featured?: boolean
+          config?: Json
+          product_badge_text?: string | null
+          product_badge_variant?: string | null
+          product_badge_priority?: number
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+        }
+        Relationships: []
+      }
+      offer_products: {
+        Row: {
+          id: string
+          offer_id: string
+          product_id: string
+          qty: number
+          special_price_cents: number | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          offer_id: string
+          product_id: string
+          qty?: number
+          special_price_cents?: number | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          offer_id?: string
+          product_id?: string
+          qty?: number
+          special_price_cents?: number | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "offer_products_offer_id_fkey"
+            columns: ["offer_id"]
+            isOneToOne: false
+            referencedRelation: "offers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "offer_products_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       products: {
         Row: {
           category: string
@@ -469,6 +577,7 @@ export type Database = {
           photo_url: string | null
           price_cents: number
           stock_qty: number
+          badge_text: string | null
           updated_at: string
         }
         Insert: {
@@ -481,6 +590,7 @@ export type Database = {
           photo_url?: string | null
           price_cents: number
           stock_qty?: number
+          badge_text?: string | null
           updated_at?: string
         }
         Update: {
@@ -493,6 +603,7 @@ export type Database = {
           photo_url?: string | null
           price_cents?: number
           stock_qty?: number
+          badge_text?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -892,7 +1003,7 @@ export type Database = {
         | "completed"
         | "cancelled"
         | "delivered"
-      payment_method_type: "gcash" | "cod"
+      payment_method_type: "gcash" | "cod" | "credit"
       payment_status_type:
         | "pending"
         | "verified"
@@ -1037,7 +1148,7 @@ export const Constants = {
         "cancelled",
         "delivered",
       ],
-      payment_method_type: ["gcash", "cod"],
+      payment_method_type: ["gcash", "cod", "credit"],
       payment_status_type: [
         "pending",
         "verified",

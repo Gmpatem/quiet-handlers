@@ -1,20 +1,15 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import { CreditCard, Eye, X, Search, TrendingUp, DollarSign, Clock } from 'lucide-react';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+import { supabaseBrowser } from '@/lib/supabase/browser';
 
 type GCashRequest = {
   id: string;
   created_at: string;
   student_name: string;
   student_contact: string;
-  transaction_type: 'cash_in' | 'send_money' | 'bills_payment' | 'buy_load';
+  transaction_type: 'cash_in' | 'cash_out';
   amount: number;
   service_fee: number;
   total_amount: number;
@@ -51,6 +46,7 @@ export default function GCashAdminClient() {
 
   // Fetch requests
   const fetchRequests = async () => {
+    const supabase = supabaseBrowser();
     try {
       const { data, error } = await supabase
         .from('gcash_requests')
@@ -109,6 +105,7 @@ export default function GCashAdminClient() {
 
   // Update status
   const updateStatus = async (id: string, newStatus: string, notes?: string) => {
+    const supabase = supabaseBrowser();
     try {
       const updateData: any = { status: newStatus };
       if (notes !== undefined) {
@@ -135,6 +132,7 @@ export default function GCashAdminClient() {
     fetchRequests();
 
     // Subscribe to realtime changes
+    const supabase = supabaseBrowser();
     const channel = supabase
       .channel('gcash-changes')
       .on('postgres_changes', 
@@ -151,9 +149,7 @@ export default function GCashAdminClient() {
   const getTransactionIcon = (type: string) => {
     const icons: { [key: string]: string } = {
       cash_in: '💵',
-      send_money: '💸',
-      bills_payment: '📄',
-      buy_load: '📱'
+      cash_out: '💸'
     };
     return icons[type] || '💳';
   };
@@ -188,7 +184,7 @@ export default function GCashAdminClient() {
             <CreditCard className="w-8 h-8 text-white" />
             <div>
               <h1 className="text-2xl sm:text-3xl font-bold text-white">GCash Service Admin</h1>
-              <p className="text-white/90 text-sm">Manage cash-in, send money & bills payment</p>
+              <p className="text-white/90 text-sm">Manage cash-in & cash-out transactions</p>
             </div>
           </div>
         </div>
@@ -381,22 +377,40 @@ export default function GCashAdminClient() {
                 </div>
               </div>
 
-              {/* Payment Proof */}
-              <div>
-                <h3 className="text-sm font-semibold text-stone-500 uppercase mb-3">Payment Proof</h3>
-                <a
-                  href={selectedRequest.payment_proof_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block"
-                >
-                  <img
-                    src={selectedRequest.payment_proof_url}
-                    alt="Payment proof"
-                    className="w-full rounded-xl border-2 border-stone-200 hover:border-amber-700 transition-colors"
-                  />
-                </a>
-              </div>
+              {/* Payment Proof - only for cash_out */}
+              {selectedRequest.transaction_type === 'cash_out' && selectedRequest.payment_proof_url && (
+                <div>
+                  <h3 className="text-sm font-semibold text-stone-500 uppercase mb-3">Payment Proof</h3>
+                  <a
+                    href={selectedRequest.payment_proof_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block"
+                  >
+                    <img
+                      src={selectedRequest.payment_proof_url}
+                      alt="Payment proof"
+                      className="w-full rounded-xl border-2 border-stone-200 hover:border-amber-700 transition-colors"
+                    />
+                  </a>
+                </div>
+              )}
+              {selectedRequest.transaction_type === 'cash_out' && !selectedRequest.payment_proof_url && (
+                <div>
+                  <h3 className="text-sm font-semibold text-stone-500 uppercase mb-3">Payment Proof</h3>
+                  <div className="bg-yellow-50 rounded-xl p-4 text-yellow-800 text-sm">
+                    No payment proof uploaded
+                  </div>
+                </div>
+              )}
+              {selectedRequest.transaction_type === 'cash_in' && (
+                <div>
+                  <h3 className="text-sm font-semibold text-stone-500 uppercase mb-3">Payment</h3>
+                  <div className="bg-blue-50 rounded-xl p-4 text-blue-800 text-sm">
+                    💵 Cash-in: Customer brings cash to Room 411
+                  </div>
+                </div>
+              )}
 
               {/* Admin Notes */}
               <div>

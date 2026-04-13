@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import Link from "next/link";
 import { supabaseBrowser } from "@/lib/supabase/browser";
-import { Search, Package, Clock, CheckCircle, XCircle, Truck, AlertCircle } from "lucide-react";
+import { Search, Package, Clock, CheckCircle, XCircle, Truck, AlertCircle, Wallet } from "lucide-react";
 
 export type OrderRow = {
   id: string;
@@ -27,7 +28,10 @@ export type PaymentRow = {
   order_id: string;
   method: string | null;
   amount_cents: number | null;
+  balance_due_cents: number | null;
   reference_number: string | null;
+  gcash_ref: string | null;
+  proof_url: string | null;
   status: string | null;
   created_at: string;
 };
@@ -203,7 +207,7 @@ export default function OrdersClient({
 
       const { data: updatedPayments } = await supabase
         .from("payments")
-        .select("id, order_id, method, amount_cents, reference_number, status, created_at")
+        .select("id, order_id, method, amount_cents, balance_due_cents, reference_number, gcash_ref, proof_url, status, created_at")
         .eq("order_id", orderId);
 
       if (updatedPayments) {
@@ -230,33 +234,40 @@ export default function OrdersClient({
 
       if (orderError) throw orderError;
 
-      if (order.payment_method?.toLowerCase() === "gcash") {
-        const { error: paymentError } = await supabase.rpc("admin_verify_payment", {
-          p_order_id: order.id,
-          p_status: "paid",
-        });
-
-        if (paymentError) throw paymentError;
-
-        const { data: updatedPayments } = await supabase
-          .from("payments")
-          .select("id, order_id, method, amount_cents, reference_number, status, created_at")
-          .eq("order_id", order.id);
-
-        if (updatedPayments) {
-          setPayments((prev) => {
-            const filtered = prev.filter((p) => p.order_id !== order.id);
-            return [...filtered, ...(updatedPayments as PaymentRow[])];
-          });
-        }
-      }
-
+      // NOTE: We intentionally do NOT auto-verify GCash payments here.
+      // Receipt upload ≠ payment verification. Admin must manually verify
+      // payments even when receipt is attached. This preserves financial truth.
+      
       setOrders((prev) =>
         prev.map((o) => (o.id === order.id ? { ...o, status: "confirmed", updated_at: new Date().toISOString() } : o))
       );
 
-      const paymentMsg = order.payment_method?.toLowerCase() === "gcash" ? " & payment verified" : "";
-      alert(`Order ${order.order_code ?? order.id.slice(0, 8)} confirmed${paymentMsg}!`);
+      // Refresh payments to ensure UI is in sync
+      const { data: updatedPayments } = await supabase
+        .from("payments")
+        .select("id, order_id, method, amount_cents, reference_number, gcash_ref, proof_url, status, created_at")
+        .eq("order_id", order.id);
+
+      if (updatedPayments) {
+        setPayments((prev) => {
+          const filtered = prev.filter((p) => p.order_id !== order.id);
+          return [...filtered, ...(updatedPayments as PaymentRow[])];
+        });
+      }
+
+      const orderCode = order.order_code ?? order.id.slice(0, 8);
+      const payment = updatedPayments?.[0];
+      const hasProof = payment?.proof_url;
+      
+      let message = `Order ${orderCode} confirmed!`;
+      if (order.payment_method?.toLowerCase() === "gcash") {
+        if (hasProof) {
+          message += `\n\n📎 Receipt attached - verify payment when ready.`;
+        } else {
+          message += `\n\n⚠️ No receipt uploaded - ask customer for proof.`;
+        }
+      }
+      alert(message);
     } catch (err: any) {
       console.error("Failed to confirm order:", err);
       alert("Confirmation failed: " + (err?.message ?? "Unknown error"));
@@ -295,6 +306,152 @@ export default function OrdersClient({
     }
   }
 
+  // ============================================
+  // CREDIT MODE HANDLERS (D2)
+  // ============================================
+
+  async function handleConvertToCredit(order: OrderRow) {
+    const orderCode = order.order_code ?? order.id.slice(0, 8);
+    const totalCents = order.total_cents ?? 0;
+
+    if (
+      !confirm(
+        `💳 Convert Order ${orderCode} to CREDIT?\n\n` +
+        `Customer: ${order.customer_name}\n` +
+        `Amount: ${peso(totalCents)}\n\n` +
+        `This will:\n` +
+        `• Change payment method to CREDIT\n` +
+        `• Set balance due to ${peso(totalCents)}\n` +
+        `• Keep order status as "${order.status}"\n\n` +
+        `The customer can pay later.`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      // Get current payment
+      const { data: currentPayment } = await supabase
+        .from("payments")
+        .select("id, amount_cents")
+        .eq("order_id", order.id)
+        .single();
+
+      if (!currentPayment) {
+        throw new Error("No payment record found for this order");
+      }
+
+      // Update payment to credit
+      const { error: paymentError } = await supabase
+        .from("payments")
+        .update({
+          method: "credit",
+          status: "pending",
+          balance_due_cents: currentPayment.amount_cents ?? totalCents,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", currentPayment.id);
+
+      if (paymentError) throw paymentError;
+
+      // Update order payment method
+      const { error: orderError } = await supabase
+        .from("orders")
+        .update({
+          payment_method: "credit",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", order.id);
+
+      if (orderError) throw orderError;
+
+      // Refresh data
+      const { data: updatedPayments } = await supabase
+        .from("payments")
+        .select("id, order_id, method, amount_cents, balance_due_cents, reference_number, gcash_ref, proof_url, status, created_at")
+        .eq("order_id", order.id);
+
+      if (updatedPayments) {
+        setPayments((prev) => {
+          const filtered = prev.filter((p) => p.order_id !== order.id);
+          return [...filtered, ...(updatedPayments as PaymentRow[])];
+        });
+      }
+
+      setOrders((prev) =>
+        prev.map((o) => (o.id === order.id ? { ...o, payment_method: "credit" } : o))
+      );
+
+      alert(`✅ Order ${orderCode} converted to credit!\n\nBalance due: ${peso(totalCents)}`);
+    } catch (err: any) {
+      console.error("Failed to convert to credit:", err);
+      alert("Credit conversion failed: " + (err?.message ?? "Unknown error"));
+    }
+  }
+
+  async function handleRecordRepayment(order: OrderRow) {
+    const orderCode = order.order_code ?? order.id.slice(0, 8);
+
+    if (
+      !confirm(
+        `💰 Record FULL REPAYMENT for Order ${orderCode}?\n\n` +
+        `Customer: ${order.customer_name}\n` +
+        `Amount: ${peso(order.total_cents ?? 0)}\n\n` +
+        `This will:\n` +
+        `• Mark payment as PAID\n` +
+        `• Clear balance due to ₱0\n` +
+        `• Settle the credit order\n\n` +
+        `Confirm cash was received.`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      // Get current payment
+      const { data: currentPayment } = await supabase
+        .from("payments")
+        .select("id")
+        .eq("order_id", order.id)
+        .single();
+
+      if (!currentPayment) {
+        throw new Error("No payment record found");
+      }
+
+      // Update payment to settled
+      const { error: paymentError } = await supabase
+        .from("payments")
+        .update({
+          status: "paid",
+          balance_due_cents: 0,
+          paid_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", currentPayment.id);
+
+      if (paymentError) throw paymentError;
+
+      // Refresh data
+      const { data: updatedPayments } = await supabase
+        .from("payments")
+        .select("id, order_id, method, amount_cents, balance_due_cents, reference_number, gcash_ref, proof_url, status, created_at")
+        .eq("order_id", order.id);
+
+      if (updatedPayments) {
+        setPayments((prev) => {
+          const filtered = prev.filter((p) => p.order_id !== order.id);
+          return [...filtered, ...(updatedPayments as PaymentRow[])];
+        });
+      }
+
+      alert(`✅ Repayment recorded!\n\nOrder ${orderCode} is now settled.`);
+    } catch (err: any) {
+      console.error("Failed to record repayment:", err);
+      alert("Repayment recording failed: " + (err?.message ?? "Unknown error"));
+    }
+  }
+
   function pickupLabel(o: OrderRow): string {
     if (String(o.fulfillment) === "delivery") return o.delivery_location ?? "Not specified";
     return o.pickup_location ?? "Not specified";
@@ -314,6 +471,18 @@ export default function OrdersClient({
       default:
         return "bg-stone-100 text-stone-700 border-stone-200";
     }
+  }
+
+  function creditStatusColor(payment: PaymentRow | undefined): string {
+    if (!payment) return "";
+    if (payment.method !== "credit") return "";
+    
+    // Credit with balance due = unpaid (purple/indigo)
+    if ((payment.balance_due_cents ?? 0) > 0) {
+      return "bg-purple-100 text-purple-700 border-purple-200";
+    }
+    // Credit settled = green
+    return "bg-emerald-100 text-emerald-700 border-emerald-200";
   }
 
   function statusIcon(status: string | null) {
@@ -353,16 +522,27 @@ export default function OrdersClient({
             </p>
           </div>
 
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 sm:h-5 sm:w-5 -translate-y-1/2 text-stone-400" />
-            <input
-              type="text"
-              placeholder="Search orders..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full rounded-xl border border-stone-200 bg-white py-2 pl-9 sm:pl-10 pr-4 text-xs sm:text-sm transition focus:border-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-700/20 sm:w-64"
-            />
+          <div className="flex items-center gap-2">
+            {/* Quick Link to Debtors */}
+            <Link
+              href="/admin/debtors"
+              className="hidden sm:flex items-center gap-2 rounded-xl border border-purple-200 bg-purple-50 px-3 py-2 text-sm font-medium text-purple-700 transition hover:border-purple-700 hover:bg-purple-100"
+            >
+              <Wallet className="h-4 w-4" />
+              Debtors
+            </Link>
+
+            {/* Search */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 sm:h-5 sm:w-5 -translate-y-1/2 text-stone-400" />
+              <input
+                type="text"
+                placeholder="Search orders..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full rounded-xl border border-stone-200 bg-white py-2 pl-9 sm:pl-10 pr-4 text-xs sm:text-sm transition focus:border-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-700/20 sm:w-64"
+              />
+            </div>
           </div>
         </div>
 
@@ -446,9 +626,31 @@ export default function OrdersClient({
                           {order.order_code ?? order.id.slice(0, 8)}
                         </div>
                       </div>
-                      <div className={`flex items-center gap-1.5 sm:gap-2 rounded-lg sm:rounded-xl border px-2 sm:px-2.5 py-1 sm:py-1.5 text-xs sm:text-sm font-semibold whitespace-nowrap ${statusColor(order.status)}`}>
-                        {statusIcon(order.status)}
-                        <span className="hidden xs:inline">{(order.status ?? "pending").replace("_", " ")}</span>
+                      <div className="flex flex-col items-end gap-1">
+                        <div className={`flex items-center gap-1.5 sm:gap-2 rounded-lg sm:rounded-xl border px-2 sm:px-2.5 py-1 sm:py-1.5 text-xs sm:text-sm font-semibold whitespace-nowrap ${statusColor(order.status)}`}>
+                          {statusIcon(order.status)}
+                          <span className="hidden xs:inline">{(order.status ?? "pending").replace("_", " ")}</span>
+                        </div>
+                        {/* Proof Submitted Badge */}
+                        {latestPayment?.proof_url && !isPaid && latestPayment?.method !== 'credit' && (
+                          <div className="flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+                            <span>📎</span>
+                            <span>Proof Submitted</span>
+                          </div>
+                        )}
+                        {/* Credit Badge */}
+                        {latestPayment?.method === 'credit' && (latestPayment?.balance_due_cents ?? 0) > 0 && (
+                          <div className="flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700">
+                            <span>💳</span>
+                            <span>Credit</span>
+                          </div>
+                        )}
+                        {latestPayment?.method === 'credit' && (latestPayment?.balance_due_cents ?? 0) === 0 && (
+                          <div className="flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                            <span>✓</span>
+                            <span>Paid</span>
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -489,6 +691,178 @@ export default function OrdersClient({
                         <span className="text-sm sm:text-base">{peso(order.subtotal_cents ?? 0)}</span>
                       </div>
                     </div>
+
+                    {/* Payment Info */}
+                    {latestPayment && (
+                      <div className={`mb-3 sm:mb-4 rounded-lg sm:rounded-xl border p-3 sm:p-4 ${
+                        latestPayment.method === 'credit' && (latestPayment.balance_due_cents ?? 0) > 0
+                          ? 'border-purple-200 bg-purple-50/30' 
+                          : latestPayment.proof_url && !isPaid 
+                            ? 'border-blue-200 bg-blue-50/30' 
+                            : 'border-stone-200 bg-white'
+                      }`}>
+                        <div className="mb-2 sm:mb-3 flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-bold uppercase tracking-wide text-stone-900">
+                          <span className="text-sm sm:text-base">💳</span>
+                          <span>Payment</span>
+                          <div className="ml-auto flex items-center gap-1">
+                            {/* Credit Badge */}
+                            {latestPayment.method === 'credit' && (latestPayment.balance_due_cents ?? 0) > 0 && (
+                              <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700 flex items-center gap-1">
+                                <span>💳</span>
+                                <span>CREDIT - Unpaid</span>
+                              </span>
+                            )}
+                            {latestPayment.method === 'credit' && (latestPayment.balance_due_cents ?? 0) === 0 && (
+                              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 flex items-center gap-1">
+                                <span>✓</span>
+                                <span>Credit Settled</span>
+                              </span>
+                            )}
+                            {/* Proof Submitted Indicator */}
+                            {latestPayment.proof_url && !isPaid && latestPayment.method !== 'credit' && (
+                              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 flex items-center gap-1">
+                                <span>📎</span>
+                                <span>Proof Submitted</span>
+                              </span>
+                            )}
+                            <span className={`rounded-full px-2 py-0.5 text-xs ${isPaid ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                              {latestPayment.status ?? "pending"}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1.5 text-xs sm:text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-stone-600">Method:</span>
+                            <span className={`font-medium uppercase ${latestPayment.method === 'credit' ? 'text-purple-700' : 'text-stone-900'}`}>
+                              {latestPayment.method ?? "—"}
+                            </span>
+                          </div>
+                          {latestPayment.method === 'credit' && (
+                            <div className="flex justify-between">
+                              <span className="text-stone-600">Balance Due:</span>
+                              <span className={`font-bold ${(latestPayment.balance_due_cents ?? 0) > 0 ? 'text-purple-700' : 'text-emerald-600'}`}>
+                                {peso(latestPayment.balance_due_cents ?? 0)}
+                              </span>
+                            </div>
+                          )}
+                          {latestPayment.gcash_ref && (
+                            <div className="flex justify-between">
+                              <span className="text-stone-600">Reference:</span>
+                              <span className="font-medium text-stone-900 font-mono">{latestPayment.gcash_ref}</span>
+                            </div>
+                          )}
+                          {latestPayment.reference_number && (
+                            <div className="flex justify-between">
+                              <span className="text-stone-600">Ref #:</span>
+                              <span className="font-medium text-stone-900 font-mono">{latestPayment.reference_number}</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between">
+                            <span className="text-stone-600">Amount:</span>
+                            <span className="font-medium text-stone-900">{peso(latestPayment.amount_cents ?? 0)}</span>
+                          </div>
+                        </div>
+
+                        {/* Receipt Image */}
+                        {latestPayment.proof_url && (
+                          <div className="mt-3">
+                            <div className="flex items-center justify-between mb-1.5">
+                              <div className="text-xs font-medium text-stone-700">Customer Receipt:</div>
+                              {!isPaid && (
+                                <span className="text-xs text-blue-600 font-medium">Awaiting Verification</span>
+                              )}
+                            </div>
+                            <a 
+                              href={latestPayment.proof_url} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="block rounded-lg border border-stone-200 overflow-hidden hover:border-amber-500 transition-colors"
+                            >
+                              <img 
+                                src={latestPayment.proof_url} 
+                                alt="Payment receipt" 
+                                className="w-full h-24 sm:h-32 object-cover"
+                              />
+                              <div className="bg-stone-50 px-2 py-1 text-xs text-center text-stone-600">
+                                Click to view full size
+                              </div>
+                            </a>
+                            {!isPaid && (
+                              <div className="mt-2 rounded-lg bg-amber-50 border border-amber-200 px-2 py-1.5">
+                                <p className="text-xs text-amber-800">
+                                  <span className="font-semibold">Action Required:</span> Review receipt and verify payment status below.
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Payment Actions for GCash */}
+                        {!isPaid && latestPayment.method?.toLowerCase() === "gcash" && (
+                          <div className="mt-3 space-y-2">
+                            <div className="text-xs text-stone-600 font-medium">Verify Payment:</div>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (confirm(`Verify payment for Order ${order.order_code ?? order.id.slice(0, 8)} as PAID?\n\nThis confirms the GCash payment was received.`)) {
+                                    handleVerifyPayment(order.id, "paid");
+                                  }
+                                }}
+                                className="flex-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 transition"
+                              >
+                                ✓ Confirm Paid
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (confirm(`Reject payment for Order ${order.order_code ?? order.id.slice(0, 8)}?\n\nUse this if the receipt is invalid or payment not found.`)) {
+                                    handleVerifyPayment(order.id, "failed");
+                                  }
+                                }}
+                                className="rounded-lg border-2 border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 transition"
+                              >
+                                ✕ Reject
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Credit Actions */}
+                        {latestPayment.method?.toLowerCase() === "credit" && (latestPayment.balance_due_cents ?? 0) > 0 && (
+                          <div className="mt-3 space-y-2">
+                            <div className="text-xs text-purple-700 font-medium">Credit Action:</div>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRecordRepayment(order);
+                              }}
+                              className="w-full rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 transition"
+                            >
+                              💰 Record Full Repayment
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Convert to Credit Option (for eligible orders) */}
+                        {!isPaid && 
+                         latestPayment.method?.toLowerCase() !== "credit" && 
+                         order.status !== "cancelled" && (
+                          <div className="mt-3 pt-3 border-t border-stone-200">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleConvertToCredit(order);
+                              }}
+                              className="w-full rounded-lg border-2 border-purple-200 bg-white px-3 py-2 text-xs font-semibold text-purple-700 hover:bg-purple-50 transition"
+                            >
+                              💳 Convert to Credit
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {/* Action Buttons */}
                     <div className="flex gap-2 sm:gap-3">

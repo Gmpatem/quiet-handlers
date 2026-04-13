@@ -4,7 +4,7 @@ import { supabaseServer } from "@/lib/supabaseServer";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, MapPin, Home } from "lucide-react";
+import { CheckCircle2, MapPin, Home, AlertCircle } from "lucide-react";
 
 function peso(cents: number) {
   return new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format((cents ?? 0) / 100);
@@ -25,10 +25,18 @@ export default async function OrderSuccessPage({ params }: { params: Promise<{ c
       pickup_location,
       delivery_location,
       payment_method,
+      status,
       total_cents
     `
     )
     .eq("order_code", code)
+    .single();
+
+  // Fetch payment info for receipt/status
+  const { data: payment } = await supabase
+    .from("payments")
+    .select("status, proof_url, gcash_ref, balance_due_cents")
+    .eq("order_id", order?.id ?? '')
     .single();
 
   if (error || !order) return notFound();
@@ -99,13 +107,64 @@ export default async function OrderSuccessPage({ params }: { params: Promise<{ c
               </div>
 
               {/* Payment */}
-              <div className="flex items-center justify-between rounded-lg bg-stone-50 px-3 py-2">
+              <div className={`flex items-center justify-between rounded-lg px-3 py-2 ${order.payment_method === "credit" ? "border border-purple-200 bg-purple-50" : "bg-stone-50"}`}>
                 <span className="text-stone-600">Payment</span>
-                <Badge variant="secondary" className="bg-amber-100 text-amber-800">
-                  {order.payment_method === "gcash" ? "GCash" : "Cash"}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  {order.payment_method === "gcash" && payment?.proof_url && (
+                    <Badge variant="secondary" className="bg-blue-100 text-blue-700 text-xs">
+                      📎 Receipt Sent
+                    </Badge>
+                  )}
+                  {order.payment_method === "credit" && (
+                    <Badge variant="secondary" className="bg-purple-100 text-purple-700 text-xs">
+                      💳 On Credit
+                    </Badge>
+                  )}
+                  <Badge variant="secondary" className={
+                    order.payment_method === "gcash" ? "bg-amber-100 text-amber-800" : 
+                    order.payment_method === "credit" ? "bg-purple-100 text-purple-800" :
+                    "bg-emerald-100 text-emerald-700"
+                  }>
+                    {order.payment_method === "gcash" ? "GCash (Pending)" : 
+                     order.payment_method === "credit" ? "Unpaid Balance" :
+                     "Cash on Pickup"}
+                  </Badge>
+                </div>
               </div>
             </div>
+
+            {/* Order Status Notice */}
+            {order.payment_method === "gcash" && (
+              <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5">
+                <div className="flex items-start gap-2">
+                  <span className="text-sm">📎</span>
+                  <div className="text-xs text-blue-800">
+                    <span className="font-semibold">Payment verification required</span>
+                    <p className="mt-0.5">
+                      {payment?.proof_url 
+                        ? "Your receipt has been submitted. An admin will verify your payment shortly."
+                        : "Please send your GCash receipt to the admin to speed up processing."}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Credit Order Notice */}
+            {order.payment_method === "credit" && (
+              <div className="rounded-lg border border-purple-200 bg-purple-50 px-3 py-2.5">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 text-purple-700 mt-0.5" />
+                  <div className="text-xs text-purple-800">
+                    <span className="font-semibold">Credit Order — Payment Required</span>
+                    <p className="mt-0.5">
+                      This order has an unpaid balance of <strong>{peso(payment?.balance_due_cents ?? order.total_cents)}</strong>. 
+                      Please repay in person at the pickup location before receiving your order or placing future orders.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Divider */}
             <div className="h-px bg-stone-200" />

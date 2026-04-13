@@ -7,7 +7,8 @@ import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, CheckCircle2, ShoppingBag, CreditCard, MapPin, User, Package, Info, Home, Building, Shield, AlertCircle } from "lucide-react";
+import { ArrowLeft, CheckCircle2, ShoppingBag, CreditCard, MapPin, User, Package, Info, Home, Building, Shield, AlertCircle, Upload, Camera, X, Copy, Check } from "lucide-react";
+import { validateImageFile } from "@/lib/validation";
 
 type CartItem = {
   id: string;
@@ -69,6 +70,7 @@ export default function CheckoutClient({ initialSettings, paymentEnums }: Checko
   const [isPending, startTransition] = useTransition();
 
   const placingRef = useRef(false);
+  const receiptInputRef = useRef<HTMLInputElement>(null);
   const [isPlacing, setIsPlacing] = useState(false);
   const [cart, setCart] = useState<CartItem[]>([]);
   const cartCount = useMemo(() => cart.reduce((a, i) => a + i.qty, 0), [cart]);
@@ -106,8 +108,16 @@ export default function CheckoutClient({ initialSettings, paymentEnums }: Checko
   const [deliveryLocation, setDeliveryLocation] = useState("");
   const [notes, setNotes] = useState("");
 
-  const [paymentMethod, setPaymentMethod] = useState<"gcash" | "cod" | "">("");
+  const [paymentMethod, setPaymentMethod] = useState<"gcash" | "cod" | "credit" | "">("");
   const [gcashRef, setGcashRef] = useState("");
+  
+  // Receipt photo upload state
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
+  const [isUploadingReceipt, setIsUploadingReceipt] = useState(false);
+  
+  // Copy GCash number state
+  const [gcashCopied, setGcashCopied] = useState(false);
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -115,8 +125,33 @@ export default function CheckoutClient({ initialSettings, paymentEnums }: Checko
   const [savedNames, setSavedNames] = useState<string[]>([]);
   const [showNameSuggestions, setShowNameSuggestions] = useState(false);
 
-  const feeCents = 0;
-  const totalCents = subtotalCents + feeCents;
+  // Pricing calculation - promo/combo-ready structure
+  const pricing = useMemo(() => {
+    const subtotal = subtotalCents;
+    const deliveryFee = 0; // Future: calculate based on location
+    const discount = 0; // Future: promo/combo discount
+    const savings = 0; // Future: amount saved from promos
+    const total = subtotal + deliveryFee - discount;
+    
+    return {
+      subtotalCents: subtotal,
+      deliveryFeeCents: deliveryFee,
+      discountCents: discount,
+      savingsCents: savings,
+      totalCents: total,
+      // Helper for display
+      formatted: {
+        subtotal: peso(subtotal),
+        deliveryFee: deliveryFee > 0 ? peso(deliveryFee) : "Free",
+        discount: discount > 0 ? `-${peso(discount)}` : null,
+        savings: savings > 0 ? peso(savings) : null,
+        total: peso(total),
+      }
+    };
+  }, [subtotalCents]);
+
+  const feeCents = pricing.deliveryFeeCents;
+  const totalCents = pricing.totalCents;
 
   // Load cart from localStorage
   useEffect(() => {
@@ -175,6 +210,45 @@ export default function CheckoutClient({ initialSettings, paymentEnums }: Checko
     }
   }, [pickupPoint]);
 
+  // Receipt photo upload handlers
+  const handleReceiptSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const validation = validateImageFile(file, false, 5);
+    if (!validation.isValid) {
+      setErrorMsg(validation.error || "Invalid receipt image");
+      return;
+    }
+
+    setReceiptFile(file);
+    setErrorMsg(null);
+
+    // Create preview
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setReceiptPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const clearReceipt = () => {
+    setReceiptFile(null);
+    setReceiptPreview(null);
+  };
+
+  // Copy GCash number to clipboard
+  const copyGcashNumber = async () => {
+    if (!gcashNumber) return;
+    try {
+      await navigator.clipboard.writeText(gcashNumber);
+      setGcashCopied(true);
+      setTimeout(() => setGcashCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
+
   const empty = cart.length === 0;
 
   function next() {
@@ -196,8 +270,14 @@ export default function CheckoutClient({ initialSettings, paymentEnums }: Checko
 
     if (step === 4) {
       if (!paymentMethod) return setErrorMsg("Please choose a payment method.");
-      if (paymentMethod === "gcash" && !gcashRef.trim())
-        return setErrorMsg("Please enter your GCash reference number (or TO-FOLLOW).");
+      // GCash validation: receipt OR reference required (at least one)
+      if (paymentMethod === "gcash") {
+        const hasRef = gcashRef.trim().length > 0;
+        const hasReceipt = !!receiptFile;
+        if (!hasRef && !hasReceipt) {
+          return setErrorMsg("Please provide either a GCash reference number OR upload a receipt (at least one is required).");
+        }
+      }
       return setStep(5);
     }
   }
@@ -207,6 +287,36 @@ export default function CheckoutClient({ initialSettings, paymentEnums }: Checko
     if (step === 2) return setStep(1);
     if (step === 4) return setStep(2);
     if (step === 5) return setStep(4);
+  }
+
+  async function uploadReceipt(orderId: string, file: File): Promise<string | null> {
+    try {
+      const supabase = supabaseBrowser();
+      const fileExt = file.name.split('.').pop() || 'jpg';
+      const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const filePath = `order-receipts/${orderId}/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('order-proofs')
+        .upload(filePath, file, {
+          contentType: file.type,
+          upsert: false
+        });
+
+      if (uploadError) {
+        console.error('Receipt upload error:', uploadError);
+        return null;
+      }
+
+      const { data: urlData } = supabase.storage
+        .from('order-proofs')
+        .getPublicUrl(filePath);
+
+      return urlData.publicUrl;
+    } catch (err) {
+      console.error('Failed to upload receipt:', err);
+      return null;
+    }
   }
 
   async function placeOrder() {
@@ -221,8 +331,12 @@ export default function CheckoutClient({ initialSettings, paymentEnums }: Checko
     if (!customerName.trim()) return setErrorMsg("Please enter your name.");
     if (!pickupPoint) return setErrorMsg("Please choose a pickup point (Boys or Girls dorm).");
     if (!paymentMethod) return setErrorMsg("Please choose a payment method.");
-    if (paymentMethod === "gcash" && !gcashRef.trim()) {
-      return setErrorMsg("Please enter your GCash reference number (or TO-FOLLOW).");
+    if (paymentMethod === "gcash") {
+      const hasRef = gcashRef.trim().length > 0;
+      const hasReceipt = !!receiptFile;
+      if (!hasRef && !hasReceipt) {
+        return setErrorMsg("Please provide either a GCash reference number OR upload a receipt (at least one is required).");
+      }
     }
 
     startTransition(async () => {
@@ -246,6 +360,14 @@ export default function CheckoutClient({ initialSettings, paymentEnums }: Checko
           qty: c.qty,
         }));
 
+        // Upload receipt if provided (for GCash payments)
+        let receiptUrl: string | null = null;
+        if (paymentMethod === "gcash" && receiptFile) {
+          setIsUploadingReceipt(true);
+          receiptUrl = await uploadReceipt(order_id, receiptFile);
+          setIsUploadingReceipt(false);
+        }
+
         const { data, error } = await supabase.rpc("place_order_atomic", {
           p_order_id: order_id,
           p_order_code: order_code,
@@ -264,6 +386,50 @@ export default function CheckoutClient({ initialSettings, paymentEnums }: Checko
         });
 
         if (error) throw new Error(error.message);
+
+        // Update payment with receipt URL if uploaded (GCash)
+        if (receiptUrl) {
+          try {
+            const { data: paymentData } = await supabase
+              .from('payments')
+              .select('id')
+              .eq('order_id', order_id)
+              .single();
+            
+            if (paymentData) {
+              await supabase
+                .from('payments')
+                .update({ 
+                  proof_url: receiptUrl,
+                })
+                .eq('id', paymentData.id);
+            }
+          } catch (paymentErr) {
+            console.error('Failed to update payment with receipt:', paymentErr);
+          }
+        }
+
+        // Update payment with balance_due for credit orders
+        if (paymentMethod === "credit") {
+          try {
+            const { data: paymentData } = await supabase
+              .from('payments')
+              .select('id')
+              .eq('order_id', order_id)
+              .single();
+            
+            if (paymentData) {
+              await supabase
+                .from('payments')
+                .update({ 
+                  balance_due_cents: totalCents,
+                })
+                .eq('id', paymentData.id);
+            }
+          } catch (paymentErr) {
+            console.error('Failed to update payment with credit balance:', paymentErr);
+          }
+        }
 
         // ✅ NEW: Save name to history for autocomplete
         try {
@@ -287,6 +453,7 @@ export default function CheckoutClient({ initialSettings, paymentEnums }: Checko
         setErrorMsg(e?.message ?? "Failed to place order.");
         placingRef.current = false;
         setIsPlacing(false);
+        setIsUploadingReceipt(false);
       }
     });
   }
@@ -629,6 +796,34 @@ export default function CheckoutClient({ initialSettings, paymentEnums }: Checko
                           )}
                         </div>
                       </button>
+
+                      {/* On Credit Option */}
+                      <button
+                        onClick={() => setPaymentMethod("credit")}
+                        className={`
+                          w-full rounded-xl border-2 p-4 text-left shadow-sm transition-all duration-200
+                          ${paymentMethod === "credit"
+                            ? "border-purple-600 bg-gradient-to-br from-purple-50 to-purple-100 ring-2 ring-purple-600/20"
+                            : "border-stone-200 bg-white hover:border-stone-300 hover:bg-stone-50"
+                          }
+                          active:scale-[0.98]
+                        `}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-purple-500 to-purple-700">
+                              <span className="text-lg font-bold text-white">CR</span>
+                            </div>
+                            <div>
+                              <div className="font-semibold text-stone-900">On Credit</div>
+                              <div className="text-sm text-stone-600">Pay later (creates balance)</div>
+                            </div>
+                          </div>
+                          {paymentMethod === "credit" && (
+                            <CheckCircle2 className="h-5 w-5 text-purple-600" />
+                          )}
+                        </div>
+                      </button>
                     </div>
 
                     {/* GCash Details */}
@@ -647,7 +842,32 @@ export default function CheckoutClient({ initialSettings, paymentEnums }: Checko
                             </div>
                             <div className="rounded-lg bg-white p-3">
                               <div className="text-xs text-amber-700">Mobile Number</div>
-                              <div className="font-semibold text-amber-900">{gcashNumber || "—"}</div>
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="font-semibold text-amber-900">{gcashNumber || "—"}</div>
+                                {gcashNumber && (
+                                  <button
+                                    onClick={copyGcashNumber}
+                                    className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-all ${
+                                      gcashCopied 
+                                        ? "bg-emerald-100 text-emerald-700" 
+                                        : "bg-amber-100 text-amber-700 hover:bg-amber-200"
+                                    }`}
+                                    title="Copy GCash number"
+                                  >
+                                    {gcashCopied ? (
+                                      <>
+                                        <Check className="h-3 w-3" />
+                                        <span>Copied</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Copy className="h-3 w-3" />
+                                        <span>Copy</span>
+                                      </>
+                                    )}
+                                  </button>
+                                )}
+                              </div>
                             </div>
                           </div>
 
@@ -662,23 +882,158 @@ export default function CheckoutClient({ initialSettings, paymentEnums }: Checko
                             </div>
                           )}
 
+                          {/* Reference or Receipt - At least one required */}
+                          <div className="rounded-lg bg-amber-100/70 border border-amber-300 p-3">
+                            <p className="text-xs text-amber-800">
+                              <span className="font-semibold">Provide at least one:</span> Reference number OR Receipt upload (both is also fine)
+                            </p>
+                          </div>
+
                           <div className="space-y-2">
-                            <label htmlFor="gcash_ref" className="text-xs font-semibold text-amber-900">
+                            <label htmlFor="gcash_ref" className="text-xs font-semibold text-amber-900 flex items-center gap-2">
                               GCash Reference Number
+                              {!receiptFile && !gcashRef && (
+                                <span className="text-amber-600">*</span>
+                              )}
+                              {(gcashRef || receiptFile) && (
+                                <span className="text-emerald-600 text-xs font-normal">✓</span>
+                              )}
                             </label>
                             <input
                               value={gcashRef}
                               id="gcash_ref"
                               name="gcash_ref"
                               onChange={(e) => setGcashRef(e.target.value)}
-                              placeholder="Enter 10-12 digit reference"
+                              placeholder="Enter 10-12 digit reference (or TO-FOLLOW)"
                               className="w-full rounded-xl border border-amber-300 bg-white px-4 py-3.5 text-sm shadow-sm outline-none transition-all focus:border-amber-700 focus:ring-2 focus:ring-amber-700/20"
                               autoComplete="off"
                               autoFocus
                             />
                             <div className="text-xs text-amber-700">
-                              If paying later, enter <span className="font-semibold">TO-FOLLOW</span>
+                              {receiptFile 
+                                ? <span className="text-emerald-700">✓ Receipt uploaded - reference is optional</span>
+                                : <span>If no receipt, enter <span className="font-semibold">TO-FOLLOW</span> or reference number</span>
+                              }
                             </div>
+                          </div>
+
+                          {/* Receipt Upload */}
+                          <div className="space-y-2">
+                            <label className="text-xs font-semibold text-amber-900 flex items-center gap-2">
+                              Payment Receipt
+                              {!receiptFile && !gcashRef && (
+                                <span className="text-amber-600">*</span>
+                              )}
+                              {receiptFile && (
+                                <span className="text-emerald-600 text-xs font-normal">✓</span>
+                              )}
+                            </label>
+                            
+                            {!receiptPreview ? (
+                              <div className="relative">
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={handleReceiptSelect}
+                                  id="receipt-upload"
+                                  className="hidden"
+                                />
+                                <label 
+                                  htmlFor="receipt-upload"
+                                  className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-amber-300 bg-white p-4 hover:border-amber-500 hover:bg-amber-50 transition-all"
+                                >
+                                  <Upload className="h-5 w-5 text-amber-600" />
+                                  <span className="text-sm text-amber-800">Upload receipt screenshot</span>
+                                  <Camera className="h-4 w-4 text-amber-400" />
+                                </label>
+                              </div>
+                            ) : (
+                              <div className="relative rounded-xl overflow-hidden border border-amber-300">
+                                <img 
+                                  src={receiptPreview} 
+                                  alt="Receipt preview" 
+                                  className="w-full max-h-40 object-contain bg-white"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={clearReceipt}
+                                  className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600 shadow-md transition-colors"
+                                  title="Remove receipt"
+                                >
+                                  <X className="h-4 w-4" />
+                                </button>
+                                <div className="absolute bottom-0 left-0 right-0 bg-blue-500 text-white text-xs py-1.5 px-3 flex items-center justify-center gap-1.5">
+                                  <CheckCircle2 className="h-3.5 w-3.5" />
+                                  Receipt attached — awaiting admin verification
+                                </div>
+                              </div>
+                            )}
+                            
+                            <div className="rounded-lg bg-amber-100/50 border border-amber-200 p-2.5">
+                              <div className="flex items-start gap-1.5">
+                                <Info className="h-3 w-3 text-amber-700 mt-0.5 flex-shrink-0" />
+                                <div className="text-xs text-amber-800 space-y-1">
+                                  <p>
+                                    <span className="font-semibold">Important:</span> Uploading a receipt helps us verify your payment faster, 
+                                    but your order status will remain &quot;pending&quot; until an admin manually confirms the payment.
+                                  </p>
+                                  {receiptFile && (
+                                    <p className="text-blue-700 font-medium">✓ Receipt ready to submit with your order</p>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Credit Details */}
+                    {paymentMethod === "credit" && (
+                      <div className="rounded-xl border border-purple-200 bg-gradient-to-br from-purple-50 to-purple-100 p-5">
+                        <div className="mb-4 flex items-center gap-2">
+                          <AlertCircle className="h-5 w-5 text-purple-700" />
+                          <div className="text-sm font-semibold text-purple-900">Credit Order</div>
+                        </div>
+
+                        <div className="space-y-4">
+                          {/* Balance Due Card */}
+                          <div className="rounded-lg bg-white border border-purple-200 p-4">
+                            <div className="text-xs text-purple-700 font-medium uppercase tracking-wide">Balance Due</div>
+                            <div className="mt-1 text-2xl font-bold text-purple-900">{peso(totalCents)}</div>
+                            <div className="mt-1 text-xs text-purple-600">To be paid later</div>
+                          </div>
+
+                          {/* Warning Info */}
+                          <div className="rounded-lg bg-purple-100/70 border border-purple-200 p-4">
+                            <div className="flex items-start gap-3">
+                              <AlertCircle className="h-5 w-5 text-purple-700 flex-shrink-0 mt-0.5" />
+                              <div className="space-y-2">
+                                <p className="text-sm font-semibold text-purple-900">
+                                  This order will be recorded as unpaid credit
+                                </p>
+                                <ul className="text-xs text-purple-800 space-y-1">
+                                  <li>• Your name will be added to the debtors list</li>
+                                  <li>• Payment is expected before receiving future orders</li>
+                                  <li>• You can repay in person at the pickup location</li>
+                                  <li>• This is NOT a paid order</li>
+                                </ul>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Confirmation Checkbox */}
+                          <div className="rounded-lg border border-purple-200 bg-white p-3">
+                            <label className="flex items-start gap-3 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                id="credit-confirm"
+                                className="mt-0.5 h-4 w-4 rounded border-purple-300 text-purple-600 focus:ring-purple-500"
+                              />
+                              <span className="text-xs text-purple-800">
+                                I understand this creates an unpaid balance of <strong>{peso(totalCents)}</strong> that I must repay before pickup or future orders.
+                              </span>
+                            </label>
                           </div>
                         </div>
                       </div>
@@ -712,11 +1067,47 @@ export default function CheckoutClient({ initialSettings, paymentEnums }: Checko
                             </div>
                             <div className="flex justify-between">
                               <span className="text-stone-600">Payment Method</span>
-                              <span className="font-semibold text-stone-900">
-                                {paymentMethod.toUpperCase()}
+                              <span className={`font-semibold ${paymentMethod === "credit" ? "text-purple-700" : "text-stone-900"}`}>
+                                {paymentMethod === "credit" ? "ON CREDIT" : paymentMethod.toUpperCase()}
                                 {paymentMethod === "gcash" && gcashRef && ` • ${gcashRef}`}
                               </span>
                             </div>
+                            {paymentMethod === "gcash" && (
+                              <>
+                                <div className="flex justify-between">
+                                  <span className="text-stone-600">Reference</span>
+                                  {gcashRef ? (
+                                    <span className="font-semibold text-stone-900 font-mono">{gcashRef}</span>
+                                  ) : receiptFile ? (
+                                    <span className="font-medium text-emerald-600">Receipt provided</span>
+                                  ) : (
+                                    <span className="font-medium text-amber-600">—</span>
+                                  )}
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-stone-600">Receipt</span>
+                                  {receiptFile ? (
+                                    <span className="font-semibold text-blue-600 flex items-center gap-1">
+                                      <CheckCircle2 className="h-3.5 w-3.5" />
+                                      Submitted
+                                    </span>
+                                  ) : gcashRef ? (
+                                    <span className="font-medium text-emerald-600">Reference provided</span>
+                                  ) : (
+                                    <span className="font-medium text-amber-600 flex items-center gap-1">
+                                      <AlertCircle className="h-3.5 w-3.5" />
+                                      Not uploaded
+                                    </span>
+                                  )}
+                                </div>
+                              </>
+                            )}
+                            {paymentMethod === "credit" && (
+                              <div className="flex justify-between">
+                                <span className="text-stone-600">Balance Due</span>
+                                <span className="font-semibold text-purple-700">{peso(totalCents)}</span>
+                              </div>
+                            )}
                           </div>
                         </div>
 
@@ -745,11 +1136,38 @@ export default function CheckoutClient({ initialSettings, paymentEnums }: Checko
                         <div className="space-y-2">
                           <div className="flex justify-between text-sm">
                             <span className="text-stone-600">Subtotal</span>
-                            <span className="font-semibold tabular-nums text-stone-900">{peso(subtotalCents)}</span>
+                            <span className="font-semibold tabular-nums text-stone-900">{pricing.formatted.subtotal}</span>
                           </div>
+                          
+                          {/* Future: Delivery fee row */}
+                          {pricing.deliveryFeeCents > 0 && (
+                            <div className="flex justify-between text-sm">
+                              <span className="text-stone-600">Delivery Fee</span>
+                              <span className="font-semibold tabular-nums text-stone-900">{pricing.formatted.deliveryFee}</span>
+                            </div>
+                          )}
+                          
+                          {/* Future: Promo/Combo discount row */}
+                          {pricing.discountCents > 0 && (
+                            <div className="flex justify-between text-sm">
+                              <span className="text-stone-600">Discount</span>
+                              <span className="font-semibold tabular-nums text-emerald-600">{pricing.formatted.discount}</span>
+                            </div>
+                          )}
+                          
+                          {/* Future: Savings indicator */}
+                          {pricing.savingsCents > 0 && (
+                            <div className="flex justify-between text-xs text-emerald-600">
+                              <span>You save</span>
+                              <span className="font-semibold">{pricing.formatted.savings}</span>
+                            </div>
+                          )}
+                          
+                          <Separator />
+                          
                           <div className="flex justify-between text-base">
                             <span className="font-semibold text-stone-900">Total Amount</span>
-                            <span className="font-bold tabular-nums text-stone-900">{peso(totalCents)}</span>
+                            <span className="font-bold tabular-nums text-amber-900">{pricing.formatted.total}</span>
                           </div>
                         </div>
                       </div>
@@ -757,14 +1175,16 @@ export default function CheckoutClient({ initialSettings, paymentEnums }: Checko
 
                     {/* Place Order Button */}
                     <Button
-                      disabled={isPending || isPlacing}
+                      disabled={isPending || isPlacing || isUploadingReceipt}
                       onClick={placeOrder}
                       className="w-full h-14 rounded-xl bg-gradient-to-r from-amber-700 to-amber-900 text-base font-semibold text-white shadow-lg hover:from-amber-800 hover:to-amber-950 active:scale-[0.98] transition-all duration-200"
                     >
-                      {isPending || isPlacing ? (
+                      {isPending || isPlacing || isUploadingReceipt ? (
                         <>
                           <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                          <span className="ml-2">Placing Order...</span>
+                          <span className="ml-2">
+                            {isUploadingReceipt ? "Uploading Receipt..." : "Placing Order..."}
+                          </span>
                         </>
                       ) : (
                         <>
@@ -774,10 +1194,32 @@ export default function CheckoutClient({ initialSettings, paymentEnums }: Checko
                       )}
                     </Button>
 
-                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-center">
-                      <div className="text-xs text-amber-700">
-                        After placing your order, you'll be redirected to your order confirmation page.
+                    <div className={`rounded-xl border p-4 text-center space-y-2 ${paymentMethod === "credit" ? "border-purple-200 bg-purple-50" : "border-amber-200 bg-amber-50"}`}>
+                      <div className={`text-xs ${paymentMethod === "credit" ? "text-purple-800" : "text-amber-800"}`}>
+                        <span className="font-semibold">What happens next:</span>
                       </div>
+                      <ul className={`text-xs space-y-1 ${paymentMethod === "credit" ? "text-purple-700" : "text-amber-700"}`}>
+                        {paymentMethod === "gcash" && (
+                          <li>• Your order will be held pending payment verification</li>
+                        )}
+                        {paymentMethod === "gcash" && receiptFile && (
+                          <li>• Admin will review your receipt and confirm payment</li>
+                        )}
+                        {paymentMethod === "gcash" && !receiptFile && (
+                          <li>• Please send proof of payment to speed up processing</li>
+                        )}
+                        {paymentMethod === "cod" && (
+                          <li>• Pay when you pick up your order</li>
+                        )}
+                        {paymentMethod === "credit" && (
+                          <>
+                            <li>• Your order will be recorded with an unpaid balance</li>
+                            <li>• You must repay {peso(totalCents)} before pickup or future orders</li>
+                            <li>• Repay in person at the pickup location</li>
+                          </>
+                        )}
+                        <li>• You'll receive your order code for tracking</li>
+                      </ul>
                     </div>
                   </div>
                 )}

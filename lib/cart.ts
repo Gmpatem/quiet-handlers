@@ -1,6 +1,7 @@
 import type { CartItem, Product } from "./types";
 
-const KEY = "tenpesorun_cart_v1";
+// Standardized cart key - aligned with storefront and checkout
+const KEY = "fds_cart_v1";
 
 export function loadCart(): CartItem[] {
   if (typeof window === "undefined") return [];

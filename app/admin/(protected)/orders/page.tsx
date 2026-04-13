@@ -39,7 +39,7 @@ export default async function AdminOrdersPage() {
   if (orderIds.length) {
     const { data: pays } = await supabase
       .from("payments")
-      .select("id, order_id, method, amount_cents, reference_number, status, created_at")
+      .select("id, order_id, method, amount_cents, balance_due_cents, reference_number, gcash_ref, proof_url, status, created_at")
       .in("order_id", orderIds);
 
     payments = (pays ?? []) as any;

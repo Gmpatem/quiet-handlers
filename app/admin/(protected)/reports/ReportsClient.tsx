@@ -432,14 +432,30 @@ export default function ReportsClient() {
               <div className="text-xs text-stone-500">Counts by order status</div>
             </div>
 
-            <div className="space-y-2">
-              {(data?.statusCounts ?? []).map((s) => (
-                <div key={s.status} className="flex items-center justify-between rounded-xl border border-stone-100 bg-stone-50 px-3 py-2">
-                  <span className="text-sm font-semibold text-stone-800">{s.status}</span>
-                  <span className="text-sm font-extrabold text-stone-900">{s.count}</span>
-                </div>
-              ))}
-              {(data?.statusCounts ?? []).length === 0 && <div className="text-sm text-stone-500">No status data.</div>}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase tracking-wide text-stone-500">
+                    <th className="py-2">Status</th>
+                    <th className="py-2 text-right">Count</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(data?.statusCounts ?? []).map((s) => (
+                    <tr key={s.status} className="border-t border-stone-100">
+                      <td className="py-2 font-semibold text-stone-800">{s.status}</td>
+                      <td className="py-2 text-right font-extrabold text-stone-900">{s.count}</td>
+                    </tr>
+                  ))}
+                  {(data?.statusCounts ?? []).length === 0 && (
+                    <tr>
+                      <td className="py-6 text-sm text-stone-500" colSpan={2}>
+                        No status data.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>

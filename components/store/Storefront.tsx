@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
+import OffersStrip from "./OffersStrip";
 import {
   ShoppingCart,
   Package,
@@ -29,6 +30,7 @@ type Product = {
   stock_qty: number;
   is_active: boolean;
   photo_url: string | null;
+  badge_text: string | null;
 };
 
 type CartItem = {
@@ -129,6 +131,9 @@ export default function Storefront({
 
   const [loading, setLoading] = useState<boolean>(false);
   const [loadErr, setLoadErr] = useState<string | null>(productsError ?? null);
+  
+  // Offer badges state
+  const [productBadges, setProductBadges] = useState<Record<string, { text: string; variant: string }>>({});
 
   // FIXED: Show ALL categories with active products (regardless of stock)
   useEffect(() => {
@@ -190,7 +195,7 @@ export default function Storefront({
     try {
       let q = supabase
         .from("products")
-        .select("id, name, category, price_cents, stock_qty, is_active, photo_url")
+        .select("id, name, category, price_cents, stock_qty, is_active, photo_url, badge_text")
         .eq("is_active", true)
         .order("name", { ascending: true });
 
@@ -224,8 +229,55 @@ export default function Storefront({
   useEffect(() => {
     if (!activeCat) return;
     loadProductsFor(activeCat);
+    loadOfferBadges();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeCat]);
+
+  // Load active offer badges for products
+  async function loadOfferBadges() {
+    try {
+      const now = new Date().toISOString();
+      const { data, error } = await supabase
+        .from('offer_products')
+        .select(`
+          product_id,
+          offers!inner(
+            product_badge_text,
+            product_badge_variant,
+            product_badge_priority,
+            is_active,
+            status,
+            start_at,
+            end_at
+          )
+        `)
+        .eq('offers.is_active', true)
+        .eq('offers.status', 'active')
+        .or(`offers.start_at.is.null,offers.start_at.lte.${now}`)
+        .or(`offers.end_at.is.null,offers.end_at.gte.${now}`)
+        .order('offers.product_badge_priority', { ascending: false });
+
+      if (error || !data) return;
+
+      // Build map of product_id -> highest priority badge
+      const badgeMap: Record<string, { text: string; variant: string }> = {};
+      for (const row of data as any[]) {
+        const offer = row.offers;
+        if (!offer?.product_badge_text) continue;
+        
+        // Only set if not already set (since we ordered by priority desc, first wins)
+        if (!badgeMap[row.product_id]) {
+          badgeMap[row.product_id] = {
+            text: offer.product_badge_text,
+            variant: offer.product_badge_variant || 'amber',
+          };
+        }
+      }
+      setProductBadges(badgeMap);
+    } catch {
+      // Silently fail - badges are optional
+    }
+  }
 
   const sortedProducts = useMemo(() => {
     const list = (products ?? []).slice();
@@ -371,6 +423,9 @@ export default function Storefront({
         {/* Subtle bottom border */}
         <div className="h-0.5 bg-gradient-to-r from-transparent via-amber-800/40 to-transparent w-full" />
       </header>
+
+      {/* Active Offers Strip - Subtle promotion */}
+      <OffersStrip />
 
       {/* Pull-to-Refresh Indicator */}
       {(pullDistance > 0 || isRefreshing) && (
@@ -552,6 +607,30 @@ export default function Storefront({
                           <Package className="h-8 w-8 opacity-50 sm:h-10 sm:w-10" />
                         </div>
                       )}
+
+                      {/* Product Badge - Offer-driven (priority) or manual fallback */}
+                      {(() => {
+                        const offerBadge = productBadges[p.id];
+                        const text = offerBadge?.text || p.badge_text;
+                        const variant = offerBadge?.variant || 'amber';
+                        
+                        if (!text) return null;
+                        
+                        const variantClasses: Record<string, string> = {
+                          amber: 'from-amber-500 to-amber-600',
+                          emerald: 'from-emerald-500 to-emerald-600',
+                          rose: 'from-rose-500 to-rose-600',
+                          blue: 'from-blue-500 to-blue-600',
+                          purple: 'from-purple-500 to-purple-600',
+                          slate: 'from-slate-500 to-slate-600',
+                        };
+                        
+                        return (
+                          <div className={`absolute left-2 top-2 rounded-lg bg-gradient-to-r ${variantClasses[variant] || variantClasses.amber} px-2 py-0.5 text-xs font-bold text-white shadow-md`}>
+                            {text}
+                          </div>
+                        );
+                      })()}
 
                       {/* Stock Badge - Shows stock quantity with color coding */}
                       <div className={`absolute right-2 top-2 rounded-lg px-1.5 py-0.5 text-xs font-semibold shadow-sm border ${

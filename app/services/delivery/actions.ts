@@ -2,6 +2,7 @@
 
 import { supabaseServer } from '@/lib/supabaseServer';
 import { revalidatePath } from 'next/cache';
+import { validateDeliveryData, type ActionResult } from '@/lib/validation';
 
 export type DeliveryFormData = {
   studentName: string;
@@ -10,12 +11,6 @@ export type DeliveryFormData = {
   storeLocation?: string;
   paymentMethod: 'prepaid' | 'cod';
   deliveryFee: number;
-};
-
-export type ActionResult = {
-  success: boolean;
-  error?: string;
-  data?: any;
 };
 
 /**
@@ -83,30 +78,20 @@ export async function submitDeliveryRequest(
   try {
     const supabase = await supabaseServer();
 
-    // Validate required fields
-    if (!data.studentName.trim()) {
-      return { success: false, error: 'Student name is required' };
-    }
+    // Validate required fields using shared validation
+    const validation = validateDeliveryData(
+      data.studentName,
+      data.studentContact,
+      data.itemDescription,
+      data.deliveryFee
+    );
 
-    if (!data.studentContact.trim()) {
-      return { success: false, error: 'Contact number is required' };
-    }
-
-    if (!data.itemDescription.trim()) {
-      return { success: false, error: 'Item description is required' };
+    if (!validation.success) {
+      return validation;
     }
 
     if (data.paymentMethod === 'prepaid' && !paymentProofUrl) {
       return { success: false, error: 'Payment proof is required for prepaid orders' };
-    }
-
-    // Validate contact number format (Philippine mobile number)
-    const contactRegex = /^(09|\+639)\d{9}$/;
-    if (!contactRegex.test(data.studentContact.replace(/\s/g, ''))) {
-      return { 
-        success: false, 
-        error: 'Please enter a valid Philippine mobile number (09XX XXX XXXX)' 
-      };
     }
 
     // Prepare insert data
@@ -191,46 +176,6 @@ export async function submitCompleteDeliveryRequest(formData: FormData): Promise
     console.error('Complete delivery submission error:', error);
     return { success: false, error: 'Failed to submit request' };
   }
-}
-
-/**
- * Validate delivery data
- */
-export function validateDeliveryData(
-  studentName: string,
-  studentContact: string,
-  itemDescription: string,
-  deliveryFee: number
-): ActionResult {
-  // Validate student name
-  if (!studentName || studentName.trim().length < 2) {
-    return { success: false, error: 'Please enter a valid name (at least 2 characters)' };
-  }
-
-  // Validate contact number
-  const contactRegex = /^(09|\+639)\d{9}$/;
-  const cleanContact = studentContact.replace(/\s/g, '');
-  if (!contactRegex.test(cleanContact)) {
-    return { 
-      success: false, 
-      error: 'Please enter a valid Philippine mobile number (09XX XXX XXXX)' 
-    };
-  }
-
-  // Validate item description
-  if (!itemDescription || itemDescription.trim().length < 10) {
-    return { 
-      success: false, 
-      error: 'Please provide a detailed item description (at least 10 characters)' 
-    };
-  }
-
-  // Validate delivery fee
-  if (deliveryFee < 0) {
-    return { success: false, error: 'Invalid delivery fee' };
-  }
-
-  return { success: true };
 }
 
 /**

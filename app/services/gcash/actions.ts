@@ -2,8 +2,12 @@
 
 import { supabaseServer } from '@/lib/supabaseServer';
 import { revalidatePath } from 'next/cache';
-
-export type GCashTransactionType = 'cash_in' | 'send_money' | 'bills_payment' | 'buy_load';
+import { 
+  validateGCashData, 
+  calculateGCashFee,
+  type ActionResult,
+  type GCashTransactionType 
+} from '@/lib/validation';
 
 export type GCashFormData = {
   studentName: string;
@@ -12,12 +16,6 @@ export type GCashFormData = {
   amount: number;
   serviceFee: number;
   totalAmount: number;
-};
-
-export type ActionResult = {
-  success: boolean;
-  error?: string;
-  data?: any;
 };
 
 /**
@@ -76,46 +74,31 @@ export async function uploadGCashPaymentProof(formData: FormData): Promise<Actio
 }
 
 /**
- * Calculate GCash service fee based on transaction type and amount
- */
-export function calculateGCashFee(transactionType: GCashTransactionType, amount: number): number {
-  // Fee structure based on your GCASH_CONFIG
-  const feeRates: Record<GCashTransactionType, number> = {
-    cash_in: 0.02,        // 2% fee
-    send_money: 0.015,    // 1.5% fee
-    bills_payment: 0.01,  // 1% fee
-    buy_load: 0.01        // 1% fee
-  };
-
-  const rate = feeRates[transactionType] || 0.02;
-  return Math.round(amount * rate * 100) / 100; // Round to 2 decimal places
-}
-
-/**
  * Submit GCash request
  */
 export async function submitGCashRequest(
   data: GCashFormData,
-  paymentProofUrl: string
+  paymentProofUrl?: string
 ): Promise<ActionResult> {
   try {
     const supabase = await supabaseServer();
 
-    // Validate required fields
-    if (!data.studentName.trim()) {
-      return { success: false, error: 'Student name is required' };
+    // Validate calculation data
+    const validation = validateGCashData(
+      data.transactionType,
+      data.amount,
+      data.serviceFee,
+      data.totalAmount
+    );
+
+    if (!validation.success) {
+      return validation;
     }
 
-    if (!data.studentContact.trim()) {
-      return { success: false, error: 'Contact number is required' };
-    }
-
-    if (data.amount <= 0) {
-      return { success: false, error: 'Amount must be greater than 0' };
-    }
-
-    if (!paymentProofUrl) {
-      return { success: false, error: 'Payment proof is required' };
+    // Note: cash_in doesn't require payment proof (user brings cash to Room 411)
+    // cash_out requires proof that user sent money via GCash
+    if (data.transactionType === 'cash_out' && !paymentProofUrl) {
+      return { success: false, error: 'Payment proof is required for cash-out' };
     }
 
     // Prepare insert data
@@ -126,7 +109,7 @@ export async function submitGCashRequest(
       amount: data.amount,
       service_fee: data.serviceFee,
       total_amount: data.totalAmount,
-      payment_proof_url: paymentProofUrl,
+      payment_proof_url: paymentProofUrl || null,
       status: 'pending'
     };
 
@@ -167,23 +150,22 @@ export async function submitCompleteGCashRequest(formData: FormData): Promise<Ac
     const amount = parseFloat(formData.get('amount') as string);
     const serviceFee = parseFloat(formData.get('serviceFee') as string);
     const totalAmount = parseFloat(formData.get('totalAmount') as string);
-    const paymentProofFile = formData.get('paymentProof') as File;
+    const paymentProofFile = formData.get('paymentProof') as File | null;
 
-    // Validate payment proof file
-    if (!paymentProofFile || paymentProofFile.size === 0) {
-      return { success: false, error: 'Payment proof is required' };
-    }
+    let paymentProofUrl: string | undefined;
 
-    // Upload payment proof
-    const proofFormData = new FormData();
-    proofFormData.append('paymentProof', paymentProofFile);
-    const proofResult = await uploadGCashPaymentProof(proofFormData);
-    
-    if (!proofResult.success) {
-      return proofResult;
+    // Upload payment proof for cash_out transactions
+    if (transactionType === 'cash_out' && paymentProofFile && paymentProofFile.size > 0) {
+      const proofFormData = new FormData();
+      proofFormData.append('paymentProof', paymentProofFile);
+      const proofResult = await uploadGCashPaymentProof(proofFormData);
+      
+      if (!proofResult.success) {
+        return proofResult;
+      }
+      
+      paymentProofUrl = proofResult.data?.url;
     }
-    
-    const paymentProofUrl = proofResult.data?.url;
 
     // Submit request
     const requestData: GCashFormData = {
@@ -200,62 +182,4 @@ export async function submitCompleteGCashRequest(formData: FormData): Promise<Ac
     console.error('Complete GCash submission error:', error);
     return { success: false, error: 'Failed to submit request' };
   }
-}
-
-/**
- * Validate GCash transaction data
- */
-export function validateGCashData(
-  transactionType: GCashTransactionType,
-  amount: number,
-  serviceFee: number,
-  totalAmount: number
-): ActionResult {
-  // Validate amount
-  if (amount <= 0) {
-    return { success: false, error: 'Amount must be greater than 0' };
-  }
-
-  // Validate minimum/maximum amounts based on transaction type
-  const limits: Record<GCashTransactionType, { min: number; max: number }> = {
-    cash_in: { min: 100, max: 50000 },
-    send_money: { min: 1, max: 50000 },
-    bills_payment: { min: 1, max: 100000 },
-    buy_load: { min: 10, max: 1000 }
-  };
-
-  const limit = limits[transactionType];
-  if (amount < limit.min) {
-    return { 
-      success: false, 
-      error: `Minimum amount for ${transactionType.replace('_', ' ')} is ₱${limit.min}` 
-    };
-  }
-
-  if (amount > limit.max) {
-    return { 
-      success: false, 
-      error: `Maximum amount for ${transactionType.replace('_', ' ')} is ₱${limit.max}` 
-    };
-  }
-
-  // Validate service fee calculation
-  const expectedFee = calculateGCashFee(transactionType, amount);
-  if (Math.abs(serviceFee - expectedFee) > 0.01) {
-    return { 
-      success: false, 
-      error: 'Invalid service fee calculation' 
-    };
-  }
-
-  // Validate total amount
-  const expectedTotal = amount + serviceFee;
-  if (Math.abs(totalAmount - expectedTotal) > 0.01) {
-    return { 
-      success: false, 
-      error: 'Invalid total amount calculation' 
-    };
-  }
-
-  return { success: true };
 }

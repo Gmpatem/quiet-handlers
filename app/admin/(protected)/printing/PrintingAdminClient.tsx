@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabaseBrowser } from '@/lib/supabase/browser';
-import { Printer, Copy, Scan, FileText, Eye, Check, X, Clock, Package, Search, Filter } from 'lucide-react';
+import { Printer, Copy, Scan, FileText, Eye, X, Search } from 'lucide-react';
 
 type PrintRequest = {
   id: string;
@@ -22,6 +22,7 @@ type PrintRequest = {
   total_amount: number;
   payment_status: 'paid' | 'unpaid';
   status: 'pending' | 'processing' | 'ready' | 'completed' | 'cancelled';
+  admin_notes?: string;
 };
 
 type Stats = {
@@ -47,7 +48,9 @@ export default function PrintingAdminClient() {
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [selectedRequest, setSelectedRequest] = useState<PrintRequest | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [adminNotes, setAdminNotes] = useState('');
   const [loading, setLoading] = useState(true);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   const supabase = supabaseBrowser();
 
@@ -108,22 +111,29 @@ export default function PrintingAdminClient() {
     setFilteredRequests(filtered);
   }, [requests, selectedStatus, searchQuery]);
 
-  // Update status
-  const updateStatus = async (id: string, newStatus: string) => {
+  // Update status and notes using server action
+  const updateRequest = async (id: string, updates: Partial<PrintRequest>) => {
+    setIsUpdating(true);
     try {
-      const { error } = await supabase
-        .from('printing_requests')
-        .update({ status: newStatus })
-        .eq('id', id);
+      const { updatePrintingRequest } = await import('@/app/services/printing/actions');
+      const result = await updatePrintingRequest(id, {
+        status: updates.status,
+        admin_notes: updates.admin_notes
+      });
 
-      if (error) throw error;
+      if (!result.success) {
+        throw new Error(result.error);
+      }
 
       // Refresh data
-      fetchRequests();
+      await fetchRequests();
       setSelectedRequest(null);
+      setAdminNotes('');
     } catch (error) {
-      console.error('Error updating status:', error);
-      alert('Failed to update status');
+      console.error('Error updating request:', error);
+      alert('Failed to update request');
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -325,7 +335,10 @@ export default function PrintingAdminClient() {
                       </td>
                       <td className="px-4 py-3">
                         <button
-                          onClick={() => setSelectedRequest(request)}
+                          onClick={() => {
+                            setSelectedRequest(request);
+                            setAdminNotes(request.admin_notes || '');
+                          }}
                           className="p-2 rounded-lg bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors"
                         >
                           <Eye className="w-4 h-4" />
@@ -349,7 +362,10 @@ export default function PrintingAdminClient() {
               <div className="flex items-center justify-between">
                 <h2 className="text-2xl font-bold text-white">Request Details</h2>
                 <button
-                  onClick={() => setSelectedRequest(null)}
+                  onClick={() => {
+                    setSelectedRequest(null);
+                    setAdminNotes('');
+                  }}
                   className="p-2 rounded-lg bg-white/20 hover:bg-white/30 text-white transition-colors"
                 >
                   <X className="w-5 h-5" />
@@ -440,6 +456,18 @@ export default function PrintingAdminClient() {
                 </div>
               </div>
 
+              {/* Admin Notes */}
+              <div>
+                <h3 className="text-sm font-semibold text-stone-500 uppercase mb-3">Admin Notes</h3>
+                <textarea
+                  value={adminNotes}
+                  onChange={(e) => setAdminNotes(e.target.value)}
+                  placeholder="Add notes about this request..."
+                  rows={3}
+                  className="w-full px-4 py-3 rounded-xl border-2 border-stone-200 focus:border-amber-700 focus:outline-none resize-none"
+                />
+              </div>
+
               {/* Status Update */}
               <div>
                 <h3 className="text-sm font-semibold text-stone-500 uppercase mb-3">Update Status</h3>
@@ -447,15 +475,18 @@ export default function PrintingAdminClient() {
                   {['pending', 'processing', 'ready', 'completed', 'cancelled'].map(status => (
                     <button
                       key={status}
-                      onClick={() => updateStatus(selectedRequest.id, status)}
-                      disabled={selectedRequest.status === status}
+                      onClick={() => updateRequest(selectedRequest.id, {
+                        status: status as any,
+                        admin_notes: adminNotes || undefined
+                      })}
+                      disabled={selectedRequest.status === status || isUpdating}
                       className={`px-4 py-3 rounded-xl font-medium text-sm transition-all ${
                         selectedRequest.status === status
                           ? 'bg-amber-700 text-white cursor-not-allowed'
                           : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
                       }`}
                     >
-                      {status.charAt(0).toUpperCase() + status.slice(1)}
+                      {isUpdating && selectedRequest.status !== status ? 'Saving...' : status.charAt(0).toUpperCase() + status.slice(1)}
                     </button>
                   ))}
                 </div>
