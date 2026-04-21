@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabaseBrowser } from '@/lib/supabase/browser';
-import { Truck, Eye, X, Search, MapPin, Phone, ShoppingBag } from 'lucide-react';
+import { Truck, Eye, X, Search } from 'lucide-react';
 
 type DeliveryRequest = {
   id: string;
@@ -15,15 +15,13 @@ type DeliveryRequest = {
   delivery_fee: number;
   payment_proof_url?: string;
   payment_status: 'paid' | 'unpaid';
-  status: 'pending' | 'processing' | 'out_for_delivery' | 'completed' | 'cancelled';
-  rider_name?: string;
+  status: 'pending' | 'processing' | 'completed' | 'cancelled';
   admin_notes?: string;
 };
 
 type Stats = {
   pending: number;
   processing: number;
-  out_for_delivery: number;
   completed: number;
   total_today: number;
   total_revenue: number;
@@ -35,7 +33,6 @@ export default function DeliveryAdminClient() {
   const [stats, setStats] = useState<Stats>({
     pending: 0,
     processing: 0,
-    out_for_delivery: 0,
     completed: 0,
     total_today: 0,
     total_revenue: 0
@@ -43,7 +40,6 @@ export default function DeliveryAdminClient() {
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [selectedRequest, setSelectedRequest] = useState<DeliveryRequest | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [riderName, setRiderName] = useState('');
   const [adminNotes, setAdminNotes] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -75,7 +71,6 @@ export default function DeliveryAdminClient() {
     const stats = {
       pending: data.filter(r => r.status === 'pending').length,
       processing: data.filter(r => r.status === 'processing').length,
-      out_for_delivery: data.filter(r => r.status === 'out_for_delivery').length,
       completed: data.filter(r => r.status === 'completed').length,
       total_today: data.filter(r => r.created_at.startsWith(today)).length,
       total_revenue: data
@@ -118,7 +113,6 @@ export default function DeliveryAdminClient() {
 
       fetchRequests();
       setSelectedRequest(null);
-      setRiderName('');
       setAdminNotes('');
     } catch (error) {
       console.error('Error updating request:', error);
@@ -147,7 +141,6 @@ export default function DeliveryAdminClient() {
     switch (status) {
       case 'pending': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
       case 'processing': return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'out_for_delivery': return 'bg-purple-100 text-purple-800 border-purple-200';
       case 'completed': return 'bg-green-100 text-green-800 border-green-200';
       case 'cancelled': return 'bg-red-100 text-red-800 border-red-200';
       default: return 'bg-stone-100 text-stone-800 border-stone-200';
@@ -192,10 +185,6 @@ export default function DeliveryAdminClient() {
             <p className="text-2xl font-bold text-blue-600">{stats.processing}</p>
           </div>
           <div className="bg-white rounded-xl p-4 border-2 border-stone-200 shadow-lg">
-            <p className="text-stone-600 text-xs font-medium mb-1">Out for Delivery</p>
-            <p className="text-2xl font-bold text-purple-600">{stats.out_for_delivery}</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 border-2 border-stone-200 shadow-lg">
             <p className="text-stone-600 text-xs font-medium mb-1">Completed</p>
             <p className="text-2xl font-bold text-green-600">{stats.completed}</p>
           </div>
@@ -224,7 +213,7 @@ export default function DeliveryAdminClient() {
             </div>
 
             <div className="flex gap-2 overflow-x-auto pb-2 sm:pb-0">
-              {['all', 'pending', 'processing', 'out_for_delivery', 'completed', 'cancelled'].map(status => (
+              {['all', 'pending', 'processing', 'completed', 'cancelled'].map(status => (
                 <button
                   key={status}
                   onClick={() => setSelectedStatus(status)}
@@ -234,7 +223,7 @@ export default function DeliveryAdminClient() {
                       : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
                   }`}
                 >
-                  {status === 'out_for_delivery' ? 'Out for Delivery' : status.charAt(0).toUpperCase() + status.slice(1)}
+                  {status.charAt(0).toUpperCase() + status.slice(1)}
                 </button>
               ))}
             </div>
@@ -253,7 +242,6 @@ export default function DeliveryAdminClient() {
                   <th className="px-4 py-3 text-left text-xs font-semibold text-stone-700 uppercase">Location</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-stone-700 uppercase">Fee</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-stone-700 uppercase">Payment</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-stone-700 uppercase">Rider</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-stone-700 uppercase">Status</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-stone-700 uppercase">Actions</th>
                 </tr>
@@ -261,7 +249,7 @@ export default function DeliveryAdminClient() {
               <tbody className="divide-y divide-stone-200">
                 {filteredRequests.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-4 py-8 text-center text-stone-500">
+                    <td colSpan={8} className="px-4 py-8 text-center text-stone-500">
                       No requests found
                     </td>
                   </tr>
@@ -297,9 +285,6 @@ export default function DeliveryAdminClient() {
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <p className="text-sm text-stone-600">{request.rider_name || '-'}</p>
-                      </td>
-                      <td className="px-4 py-3">
                         <span className={`px-2 py-1 rounded text-xs font-medium border-2 ${getStatusColor(request.status)}`}>
                           {request.status.replace('_', ' ')}
                         </span>
@@ -308,7 +293,6 @@ export default function DeliveryAdminClient() {
                         <button
                           onClick={() => {
                             setSelectedRequest(request);
-                            setRiderName(request.rider_name || '');
                             setAdminNotes(request.admin_notes || '');
                           }}
                           className="p-2 rounded-lg bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors"
@@ -335,7 +319,6 @@ export default function DeliveryAdminClient() {
                 <button
                   onClick={() => {
                     setSelectedRequest(null);
-                    setRiderName('');
                     setAdminNotes('');
                   }}
                   className="p-2 rounded-lg bg-white/20 hover:bg-white/30 text-white transition-colors"
@@ -390,18 +373,6 @@ export default function DeliveryAdminClient() {
                 </div>
               )}
 
-              {/* Rider Assignment */}
-              <div>
-                <h3 className="text-sm font-semibold text-stone-500 uppercase mb-3">Assign Rider</h3>
-                <input
-                  type="text"
-                  value={riderName}
-                  onChange={(e) => setRiderName(e.target.value)}
-                  placeholder="Enter rider name..."
-                  className="w-full px-4 py-3 rounded-xl border-2 border-stone-200 focus:border-amber-700 focus:outline-none"
-                />
-              </div>
-
               {/* Admin Notes */}
               <div>
                 <h3 className="text-sm font-semibold text-stone-500 uppercase mb-3">Admin Notes</h3>
@@ -418,12 +389,11 @@ export default function DeliveryAdminClient() {
               <div>
                 <h3 className="text-sm font-semibold text-stone-500 uppercase mb-3">Update Status</h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {['pending', 'processing', 'out_for_delivery', 'completed', 'cancelled'].map(status => (
+                  {['pending', 'processing', 'completed', 'cancelled'].map(status => (
                     <button
                       key={status}
                       onClick={() => updateRequest(selectedRequest.id, {
                         status: status as any,
-                        rider_name: riderName || undefined,
                         admin_notes: adminNotes || undefined
                       })}
                       disabled={selectedRequest.status === status}
@@ -433,7 +403,7 @@ export default function DeliveryAdminClient() {
                           : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
                       }`}
                     >
-                      {status === 'out_for_delivery' ? 'Out' : status.charAt(0).toUpperCase() + status.slice(1)}
+                      {status.charAt(0).toUpperCase() + status.slice(1)}
                     </button>
                   ))}
                 </div>

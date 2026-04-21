@@ -17,7 +17,7 @@ type ReportParams = {
   timezone?: string;
 
   fulfillment: "all" | "pickup" | "delivery";
-  payment_method: "all" | "cod" | "gcash";
+  payment_method: "all" | "cod" | "gcash" | "credit";
   paid_only: boolean;
 
   status:
@@ -89,7 +89,7 @@ type OrderItemRow = {
 
 type OpsSnapshot = {
   fulfillmentCounts: { pickup: number; delivery: number; other: number };
-  paymentCounts: { cod: number; gcash: number; other: number };
+  paymentCounts: { cod: number; gcash: number; credit: number; other: number };
   paidRatePct: number; // 0..100 (1 decimal)
   cancelRatePct: number; // 0..100 (1 decimal)
   avgItemsPerOrder: number; // 1 decimal
@@ -165,6 +165,29 @@ function isPaidLike(p: { status?: string | null; paid_at?: string | null } | nul
   return ["paid", "completed", "confirmed", "success", "succeeded", "verified"].includes(s);
 }
 
+const ALLOWED_FULFILLMENT = new Set<ReportParams["fulfillment"]>([
+  "all",
+  "pickup",
+  "delivery",
+]);
+const ALLOWED_PAYMENT_METHOD = new Set<ReportParams["payment_method"]>([
+  "all",
+  "cod",
+  "gcash",
+  "credit",
+]);
+const ALLOWED_ORDER_STATUS = new Set<ReportParams["status"]>([
+  "all",
+  "pending",
+  "confirmed",
+  "preparing",
+  "ready",
+  "out_for_delivery",
+  "completed",
+  "cancelled",
+  "delivered",
+]);
+
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as ReportParams;
@@ -178,10 +201,14 @@ export async function POST(req: Request) {
       start_at,
       end_at,
       timezone,
-      fulfillment: (body.fulfillment ?? "all") as any,
-      payment_method: (body.payment_method ?? "all") as any,
+      fulfillment: ALLOWED_FULFILLMENT.has(body.fulfillment)
+        ? body.fulfillment
+        : "all",
+      payment_method: ALLOWED_PAYMENT_METHOD.has(body.payment_method)
+        ? body.payment_method
+        : "all",
       paid_only: Boolean(body.paid_only),
-      status: (body.status ?? "all") as any,
+      status: ALLOWED_ORDER_STATUS.has(body.status) ? body.status : "all",
       top_n: clampTopN(body.top_n),
     };
 
@@ -218,7 +245,7 @@ export async function POST(req: Request) {
         itemsByOrderId: {},
         ops: {
           fulfillmentCounts: { pickup: 0, delivery: 0, other: 0 },
-          paymentCounts: { cod: 0, gcash: 0, other: 0 },
+          paymentCounts: { cod: 0, gcash: 0, credit: 0, other: 0 },
           paidRatePct: 0,
           cancelRatePct: 0,
           avgItemsPerOrder: 0,
@@ -369,7 +396,7 @@ export async function POST(req: Request) {
 
     // ✅ Ops snapshot + alerts
     const fulfillmentCounts = { pickup: 0, delivery: 0, other: 0 };
-    const paymentCounts = { cod: 0, gcash: 0, other: 0 };
+    const paymentCounts = { cod: 0, gcash: 0, credit: 0, other: 0 };
 
     for (const o of finalOrders) {
       const f = (o.fulfillment ?? "").toLowerCase();
@@ -380,6 +407,7 @@ export async function POST(req: Request) {
       const pm = (o.payment_method ?? "").toLowerCase();
       if (pm === "cod" || pm === "cash") paymentCounts.cod++;
       else if (pm === "gcash") paymentCounts.gcash++;
+      else if (pm === "credit") paymentCounts.credit++;
       else paymentCounts.other++;
     }
 

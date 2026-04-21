@@ -42,7 +42,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
     () => [
       { href: "/admin", label: "Dashboard", icon: "🏠" },
       { href: "/admin/orders", label: "Orders", icon: "📦" },
-      { href: "/admin/debtors", label: "Debtors", icon: "💰" },
+      { href: "/admin/credit-orders", label: "Credit Orders", icon: "💳" },
     ],
     []
   );

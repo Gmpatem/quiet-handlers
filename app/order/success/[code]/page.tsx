@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, MapPin, Home, AlertCircle } from "lucide-react";
+import { getCreditBalanceDue } from "@/lib/payments";
 
 function peso(cents: number) {
   return new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format((cents ?? 0) / 100);
@@ -32,14 +33,16 @@ export default async function OrderSuccessPage({ params }: { params: Promise<{ c
     .eq("order_code", code)
     .single();
 
+  if (error || !order) return notFound();
+
   // Fetch payment info for receipt/status
   const { data: payment } = await supabase
     .from("payments")
-    .select("status, proof_url, gcash_ref, balance_due_cents")
-    .eq("order_id", order?.id ?? '')
-    .single();
-
-  if (error || !order) return notFound();
+    .select("status, proof_url, gcash_ref, reference_number, balance_due_cents, paid_at, amount_cents, method, created_at")
+    .eq("order_id", order.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
   const { data: items } = await supabase
     .from("order_items")
@@ -48,6 +51,7 @@ export default async function OrderSuccessPage({ params }: { params: Promise<{ c
     .order("name_snapshot", { ascending: true });
 
   const orderItems = items ?? [];
+  const creditBalanceDue = getCreditBalanceDue(payment as any, order.total_cents ?? 0);
 
   const pickupLocationLabel =
     order.pickup_location === "boys_411"
@@ -158,7 +162,7 @@ export default async function OrderSuccessPage({ params }: { params: Promise<{ c
                   <div className="text-xs text-purple-800">
                     <span className="font-semibold">Credit Order — Payment Required</span>
                     <p className="mt-0.5">
-                      This order has an unpaid balance of <strong>{peso(payment?.balance_due_cents ?? order.total_cents)}</strong>. 
+                      This order has an unpaid balance of <strong>{peso(creditBalanceDue)}</strong>. 
                       Please repay in person at the pickup location before receiving your order or placing future orders.
                     </p>
                   </div>

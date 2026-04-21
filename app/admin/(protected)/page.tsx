@@ -159,7 +159,7 @@ export default async function AdminDashboardPage() {
   const { data: deliveryPending, error: deliveryErr } = await supabase
     .from("delivery_requests")
     .select("status")
-    .in("status", ["pending", "processing", "out_for_delivery"]);
+    .in("status", ["pending", "processing"]);
   if (deliveryErr) console.error("delivery pending error", deliveryErr);
 
   const servicePending = {
@@ -188,10 +188,10 @@ export default async function AdminDashboardPage() {
             📦 Orders
           </Link>
           <Link
-            href="/admin/debtors"
+            href="/admin/credit-orders"
             className="rounded-xl border border-purple-200 px-3 py-2 text-sm font-medium text-purple-700 transition hover:border-purple-700 hover:bg-purple-50 text-center"
           >
-            💰 Debtors
+            💳 Credit Orders
           </Link>
         </div>
       </div>
@@ -393,7 +393,7 @@ export default async function AdminDashboardPage() {
         </div>
       </div>
 
-      {/* Credit / Debtors Summary (D2) */}
+      {/* Credit Snapshot */}
       <DebtorsSummary />
 
       <div className="mt-6 grid gap-3 sm:grid-cols-4">

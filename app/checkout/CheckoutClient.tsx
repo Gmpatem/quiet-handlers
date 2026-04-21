@@ -322,10 +322,6 @@ export default function CheckoutClient({ initialSettings, paymentEnums }: Checko
   async function placeOrder() {
     setErrorMsg(null);
 
-    if (placingRef.current) return;
-    placingRef.current = true;
-    setIsPlacing(true);
-    
     if (empty) return setErrorMsg("Your cart is empty.");
     if (!paymentStatusDefault) return setErrorMsg("Loading settings… please try again.");
     if (!customerName.trim()) return setErrorMsg("Please enter your name.");
@@ -338,6 +334,10 @@ export default function CheckoutClient({ initialSettings, paymentEnums }: Checko
         return setErrorMsg("Please provide either a GCash reference number OR upload a receipt (at least one is required).");
       }
     }
+
+    if (placingRef.current) return;
+    placingRef.current = true;
+    setIsPlacing(true);
 
     startTransition(async () => {
       try {
@@ -381,7 +381,7 @@ export default function CheckoutClient({ initialSettings, paymentEnums }: Checko
           p_delivery_location: "",
           p_payment_method: paymentMethod,
           p_payment_status: paymentStatusDefault,
-          p_payment_ref: paymentMethod === "gcash" ? gcashRef.trim() : null,
+          p_payment_ref: paymentMethod === "gcash" ? gcashRef.trim() : "",
           p_items: items,
         });
 
@@ -394,15 +394,20 @@ export default function CheckoutClient({ initialSettings, paymentEnums }: Checko
               .from('payments')
               .select('id')
               .eq('order_id', order_id)
-              .single();
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
             
             if (paymentData) {
-              await supabase
+              const { error: updateProofError } = await supabase
                 .from('payments')
                 .update({ 
                   proof_url: receiptUrl,
                 })
                 .eq('id', paymentData.id);
+              if (updateProofError) {
+                throw updateProofError;
+              }
             }
           } catch (paymentErr) {
             console.error('Failed to update payment with receipt:', paymentErr);
@@ -416,15 +421,21 @@ export default function CheckoutClient({ initialSettings, paymentEnums }: Checko
               .from('payments')
               .select('id')
               .eq('order_id', order_id)
-              .single();
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
             
             if (paymentData) {
-              await supabase
+              const { error: updateCreditError } = await supabase
                 .from('payments')
                 .update({ 
                   balance_due_cents: totalCents,
+                  paid_at: null,
                 })
                 .eq('id', paymentData.id);
+              if (updateCreditError) {
+                throw updateCreditError;
+              }
             }
           } catch (paymentErr) {
             console.error('Failed to update payment with credit balance:', paymentErr);
@@ -1013,7 +1024,7 @@ export default function CheckoutClient({ initialSettings, paymentEnums }: Checko
                                   This order will be recorded as unpaid credit
                                 </p>
                                 <ul className="text-xs text-purple-800 space-y-1">
-                                  <li>• Your name will be added to the debtors list</li>
+                                    <li>• Your order will appear in the admin credit tracking workspace</li>
                                   <li>• Payment is expected before receiving future orders</li>
                                   <li>• You can repay in person at the pickup location</li>
                                   <li>• This is NOT a paid order</li>

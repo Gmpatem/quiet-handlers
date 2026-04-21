@@ -4,10 +4,12 @@ node_modules
 # next
 .next
 out
+dist
 
 # env
 .env
 .env.local
+.env.*
 .env.*.local
 
 # logs

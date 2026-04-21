@@ -39,18 +39,18 @@ export default async function AdminOrdersPage() {
   if (orderIds.length) {
     const { data: pays } = await supabase
       .from("payments")
-      .select("id, order_id, method, amount_cents, balance_due_cents, reference_number, gcash_ref, proof_url, status, created_at")
+      .select("id, order_id, method, amount_cents, balance_due_cents, reference_number, gcash_ref, proof_url, status, paid_at, created_at")
       .in("order_id", orderIds);
 
     payments = (pays ?? []) as any;
   }
 
-  // TASK 2 FIX: Fetch order_items to prevent crashes
+  // Fetch order_items from snapshot columns used by the real schema
   let orderItems: OrderItemRow[] = [];
   if (orderIds.length) {
     const { data: items } = await supabase
       .from("order_items")
-      .select("id, order_id, product_id, product_name, qty, price_at_order_cents")
+      .select("id, order_id, product_id, name_snapshot, unit_price_cents, line_total_cents, qty")
       .in("order_id", orderIds);
 
     orderItems = (items ?? []) as any;

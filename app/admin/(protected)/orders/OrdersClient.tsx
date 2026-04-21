@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { supabaseBrowser } from "@/lib/supabase/browser";
+import { getCreditBalanceDue, isPaymentSettled } from "@/lib/payments";
 import { Search, Package, Clock, CheckCircle, XCircle, Truck, AlertCircle, Wallet } from "lucide-react";
 
 export type OrderRow = {
@@ -33,6 +34,7 @@ export type PaymentRow = {
   gcash_ref: string | null;
   proof_url: string | null;
   status: string | null;
+  paid_at: string | null;
   created_at: string;
 };
 
@@ -40,17 +42,19 @@ export type OrderItemRow = {
   id: string;
   order_id: string;
   product_id: string | null;
-  product_name: string | null;
+  name_snapshot: string;
   qty: number;
-  price_at_order_cents: number;
+  unit_price_cents: number;
+  line_total_cents: number;
 };
 
 type RawOrderItem = {
   id: string;
   order_id: string;
   product_id: string | null;
-  name_snapshot: string;
-  unit_price_cents: number;
+  name_snapshot: string | null;
+  unit_price_cents: number | null;
+  line_total_cents: number | null;
   qty: number;
 };
 
@@ -79,11 +83,10 @@ function normalizeItems(input: any[] | null | undefined): OrderItemRow[] {
     id: String(r.id),
     order_id: String(r.order_id),
     product_id: r.product_id ?? null,
-    // support BOTH shapes: old (product_name) OR real schema (name_snapshot)
-    product_name: (r.product_name ?? r.name_snapshot ?? null) as string | null,
+    name_snapshot: String(r.name_snapshot ?? ""),
     qty: Number(r.qty ?? 0),
-    // support BOTH shapes: old (price_at_order_cents) OR real schema (unit_price_cents)
-    price_at_order_cents: Number(r.price_at_order_cents ?? r.unit_price_cents ?? 0),
+    unit_price_cents: Number(r.unit_price_cents ?? 0),
+    line_total_cents: Number(r.line_total_cents ?? 0),
   }));
 }
 
@@ -144,7 +147,7 @@ export default function OrdersClient({
     async function loadItemsForVisibleOrders() {
       const { data, error } = await supabase
         .from("order_items")
-        .select("id, order_id, product_id, name_snapshot, unit_price_cents, qty")
+        .select("id, order_id, product_id, name_snapshot, unit_price_cents, line_total_cents, qty")
         .in("order_id", visibleOrderIds);
 
       if (cancelled) return;
@@ -159,9 +162,10 @@ export default function OrdersClient({
         id: r.id,
         order_id: r.order_id,
         product_id: r.product_id,
-        product_name: r.name_snapshot ?? null,
+        name_snapshot: r.name_snapshot ?? "",
         qty: Number(r.qty ?? 0),
-        price_at_order_cents: Number(r.unit_price_cents ?? 0),
+        unit_price_cents: Number(r.unit_price_cents ?? 0),
+        line_total_cents: Number(r.line_total_cents ?? 0),
       }));
 
       setItems((prev) => {
@@ -196,10 +200,14 @@ export default function OrdersClient({
     }
   }
 
-  async function handleVerifyPayment(orderId: string, paymentStatus: string) {
+  async function handleVerifyPayment(
+    paymentId: string,
+    orderId: string,
+    paymentStatus: "paid" | "rejected"
+  ) {
     try {
       const { error } = await supabase.rpc("admin_verify_payment", {
-        p_order_id: orderId,
+        p_payment_id: paymentId,
         p_status: paymentStatus,
       });
 
@@ -207,7 +215,7 @@ export default function OrdersClient({
 
       const { data: updatedPayments } = await supabase
         .from("payments")
-        .select("id, order_id, method, amount_cents, balance_due_cents, reference_number, gcash_ref, proof_url, status, created_at")
+        .select("id, order_id, method, amount_cents, balance_due_cents, reference_number, gcash_ref, proof_url, status, paid_at, created_at")
         .eq("order_id", orderId);
 
       if (updatedPayments) {
@@ -245,7 +253,7 @@ export default function OrdersClient({
       // Refresh payments to ensure UI is in sync
       const { data: updatedPayments } = await supabase
         .from("payments")
-        .select("id, order_id, method, amount_cents, reference_number, gcash_ref, proof_url, status, created_at")
+        .select("id, order_id, method, amount_cents, balance_due_cents, reference_number, gcash_ref, proof_url, status, paid_at, created_at")
         .eq("order_id", order.id);
 
       if (updatedPayments) {
@@ -335,7 +343,9 @@ export default function OrdersClient({
         .from("payments")
         .select("id, amount_cents")
         .eq("order_id", order.id)
-        .single();
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
       if (!currentPayment) {
         throw new Error("No payment record found for this order");
@@ -348,7 +358,7 @@ export default function OrdersClient({
           method: "credit",
           status: "pending",
           balance_due_cents: currentPayment.amount_cents ?? totalCents,
-          updated_at: new Date().toISOString(),
+          paid_at: null,
         })
         .eq("id", currentPayment.id);
 
@@ -368,7 +378,7 @@ export default function OrdersClient({
       // Refresh data
       const { data: updatedPayments } = await supabase
         .from("payments")
-        .select("id, order_id, method, amount_cents, balance_due_cents, reference_number, gcash_ref, proof_url, status, created_at")
+        .select("id, order_id, method, amount_cents, balance_due_cents, reference_number, gcash_ref, proof_url, status, paid_at, created_at")
         .eq("order_id", order.id);
 
       if (updatedPayments) {
@@ -413,7 +423,9 @@ export default function OrdersClient({
         .from("payments")
         .select("id")
         .eq("order_id", order.id)
-        .single();
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
       if (!currentPayment) {
         throw new Error("No payment record found");
@@ -426,7 +438,6 @@ export default function OrdersClient({
           status: "paid",
           balance_due_cents: 0,
           paid_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
         })
         .eq("id", currentPayment.id);
 
@@ -435,7 +446,7 @@ export default function OrdersClient({
       // Refresh data
       const { data: updatedPayments } = await supabase
         .from("payments")
-        .select("id, order_id, method, amount_cents, balance_due_cents, reference_number, gcash_ref, proof_url, status, created_at")
+        .select("id, order_id, method, amount_cents, balance_due_cents, reference_number, gcash_ref, proof_url, status, paid_at, created_at")
         .eq("order_id", order.id);
 
       if (updatedPayments) {
@@ -523,13 +534,12 @@ export default function OrdersClient({
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Quick Link to Debtors */}
             <Link
-              href="/admin/debtors"
-              className="hidden sm:flex items-center gap-2 rounded-xl border border-purple-200 bg-purple-50 px-3 py-2 text-sm font-medium text-purple-700 transition hover:border-purple-700 hover:bg-purple-100"
+              href="/admin/credit-orders"
+              className="hidden sm:flex items-center gap-2 rounded-xl border border-purple-200 bg-white px-3 py-2 text-sm font-medium text-purple-700 transition hover:border-purple-700 hover:bg-purple-50"
             >
               <Wallet className="h-4 w-4" />
-              Debtors
+              Credit Orders
             </Link>
 
             {/* Search */}
@@ -576,7 +586,12 @@ export default function OrdersClient({
               const orderPayments = (payments ?? []).filter((p) => p.order_id === order.id);
               const latestPayment = [...orderPayments].sort((a, b) => (a.created_at > b.created_at ? -1 : 1))[0];
               const orderItems = (items ?? []).filter((item) => item.order_id === order.id);
-              const isPaid = latestPayment?.status === "paid";
+              const isPaid = isPaymentSettled(latestPayment?.status, latestPayment?.paid_at);
+              const creditBalanceDue = getCreditBalanceDue(latestPayment, order.total_cents ?? 0);
+              const hasOutstandingCredit =
+                latestPayment?.method === "credit" && creditBalanceDue > 0;
+              const isCreditSettled =
+                latestPayment?.method === "credit" && !hasOutstandingCredit;
 
               const getPrimaryButton = () => {
                 if (order.status === "pending") {
@@ -639,13 +654,13 @@ export default function OrdersClient({
                           </div>
                         )}
                         {/* Credit Badge */}
-                        {latestPayment?.method === 'credit' && (latestPayment?.balance_due_cents ?? 0) > 0 && (
+                        {hasOutstandingCredit && (
                           <div className="flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700">
                             <span>💳</span>
                             <span>Credit</span>
                           </div>
                         )}
-                        {latestPayment?.method === 'credit' && (latestPayment?.balance_due_cents ?? 0) === 0 && (
+                        {isCreditSettled && (
                           <div className="flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
                             <span>✓</span>
                             <span>Paid</span>
@@ -675,10 +690,14 @@ export default function OrdersClient({
                           <div key={item.id} className="flex items-center justify-between text-xs sm:text-sm gap-2">
                             <span className="text-stone-700 truncate flex-1 min-w-0">
                               <span className="font-bold text-stone-900">{item.qty}×</span>{" "}
-                              {item.product_name ?? "Unknown"}
+                              {item.name_snapshot || "Unknown item"}
                             </span>
                             <span className="font-semibold text-stone-900 whitespace-nowrap text-xs sm:text-sm">
-                              {peso((item.price_at_order_cents ?? 0) * (item.qty ?? 0))}
+                              {peso(
+                                (item.line_total_cents ?? 0) > 0
+                                  ? item.line_total_cents
+                                  : (item.unit_price_cents ?? 0) * (item.qty ?? 0)
+                              )}
                             </span>
                           </div>
                         ))}
@@ -695,7 +714,7 @@ export default function OrdersClient({
                     {/* Payment Info */}
                     {latestPayment && (
                       <div className={`mb-3 sm:mb-4 rounded-lg sm:rounded-xl border p-3 sm:p-4 ${
-                        latestPayment.method === 'credit' && (latestPayment.balance_due_cents ?? 0) > 0
+                        hasOutstandingCredit
                           ? 'border-purple-200 bg-purple-50/30' 
                           : latestPayment.proof_url && !isPaid 
                             ? 'border-blue-200 bg-blue-50/30' 
@@ -706,13 +725,13 @@ export default function OrdersClient({
                           <span>Payment</span>
                           <div className="ml-auto flex items-center gap-1">
                             {/* Credit Badge */}
-                            {latestPayment.method === 'credit' && (latestPayment.balance_due_cents ?? 0) > 0 && (
+                            {hasOutstandingCredit && (
                               <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700 flex items-center gap-1">
                                 <span>💳</span>
                                 <span>CREDIT - Unpaid</span>
                               </span>
                             )}
-                            {latestPayment.method === 'credit' && (latestPayment.balance_due_cents ?? 0) === 0 && (
+                            {isCreditSettled && (
                               <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 flex items-center gap-1">
                                 <span>✓</span>
                                 <span>Credit Settled</span>
@@ -741,8 +760,8 @@ export default function OrdersClient({
                           {latestPayment.method === 'credit' && (
                             <div className="flex justify-between">
                               <span className="text-stone-600">Balance Due:</span>
-                              <span className={`font-bold ${(latestPayment.balance_due_cents ?? 0) > 0 ? 'text-purple-700' : 'text-emerald-600'}`}>
-                                {peso(latestPayment.balance_due_cents ?? 0)}
+                              <span className={`font-bold ${creditBalanceDue > 0 ? 'text-purple-700' : 'text-emerald-600'}`}>
+                                {peso(creditBalanceDue)}
                               </span>
                             </div>
                           )}
@@ -807,7 +826,7 @@ export default function OrdersClient({
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   if (confirm(`Verify payment for Order ${order.order_code ?? order.id.slice(0, 8)} as PAID?\n\nThis confirms the GCash payment was received.`)) {
-                                    handleVerifyPayment(order.id, "paid");
+                                    handleVerifyPayment(latestPayment.id, order.id, "paid");
                                   }
                                 }}
                                 className="flex-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 transition"
@@ -818,7 +837,7 @@ export default function OrdersClient({
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   if (confirm(`Reject payment for Order ${order.order_code ?? order.id.slice(0, 8)}?\n\nUse this if the receipt is invalid or payment not found.`)) {
-                                    handleVerifyPayment(order.id, "failed");
+                                    handleVerifyPayment(latestPayment.id, order.id, "rejected");
                                   }
                                 }}
                                 className="rounded-lg border-2 border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 transition"
@@ -830,7 +849,7 @@ export default function OrdersClient({
                         )}
 
                         {/* Credit Actions */}
-                        {latestPayment.method?.toLowerCase() === "credit" && (latestPayment.balance_due_cents ?? 0) > 0 && (
+                        {latestPayment.method?.toLowerCase() === "credit" && hasOutstandingCredit && (
                           <div className="mt-3 space-y-2">
                             <div className="text-xs text-purple-700 font-medium">Credit Action:</div>
                             <button

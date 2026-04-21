@@ -10,7 +10,7 @@ type ReportParams = {
   timezone?: string;
 
   fulfillment: "all" | "pickup" | "delivery";
-  payment_method: "all" | "cod" | "gcash";
+  payment_method: "all" | "cod" | "gcash" | "credit";
   paid_only: boolean;
 
   status: "all" | "pending" | "confirmed" | "preparing" | "ready" | "out_for_delivery" | "completed" | "cancelled" | "delivered";
@@ -336,6 +336,7 @@ export default function ReportsClient() {
                   <option value="all">All</option>
                   <option value="cod">COD</option>
                   <option value="gcash">GCash</option>
+                  <option value="credit">Credit</option>
                 </select>
               </div>
 

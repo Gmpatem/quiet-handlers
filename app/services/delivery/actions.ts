@@ -183,7 +183,7 @@ export async function submitCompleteDeliveryRequest(formData: FormData): Promise
  */
 export async function updateDeliveryStatus(
   requestId: string,
-  newStatus: 'pending' | 'processing' | 'out_for_delivery' | 'completed' | 'cancelled',
+  newStatus: 'pending' | 'processing' | 'completed' | 'cancelled',
   riderName?: string,
   adminNotes?: string
 ): Promise<ActionResult> {
@@ -210,15 +210,14 @@ export async function updateDeliveryStatus(
     // Prepare update data
     const updateData: any = {
       status: newStatus,
-      updated_at: new Date().toISOString()
     };
 
-    if (riderName) {
-      updateData.rider_name = riderName.trim();
-    }
+    // riderName is kept in the function signature for backward-compatibility
+    // with existing callers, but delivery_requests has no rider_name column.
+    void riderName;
 
-    if (adminNotes) {
-      updateData.admin_notes = adminNotes.trim();
+    if (adminNotes !== undefined) {
+      updateData.admin_notes = adminNotes.trim() || null;
     }
 
     // Update status
