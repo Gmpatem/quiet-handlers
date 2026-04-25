@@ -39,7 +39,7 @@ export default function DeliveryRequestClient() {
 
     const validation = validateImageFile(file, false, 5);
     if (!validation.isValid) {
-      setError(validation.error);
+      setError(validation.error || null);
       return;
     }
 
@@ -62,28 +62,28 @@ export default function DeliveryRequestClient() {
     // Client-side validation using shared utilities
     const nameValidation = validateName(formData.student_name);
     if (!nameValidation.isValid) {
-      setError(nameValidation.error);
+      setError(nameValidation.error || null);
       setLoading(false);
       return;
     }
 
     const contactValidation = validatePhilippineMobileNumber(formData.student_contact);
     if (!contactValidation.isValid) {
-      setError(contactValidation.error);
+      setError(contactValidation.error || null);
       setLoading(false);
       return;
     }
 
     const descValidation = validateItemDescription(formData.item_description);
     if (!descValidation.isValid) {
-      setError(descValidation.error);
+      setError(descValidation.error || null);
       setLoading(false);
       return;
     }
 
     const proofValidation = validateImageFile(paymentProof, paymentMethod === "prepaid", 5);
     if (!proofValidation.isValid) {
-      setError(proofValidation.error);
+      setError(proofValidation.error || null);
       setLoading(false);
       return;
     }

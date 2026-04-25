@@ -25,8 +25,12 @@ CREATE TABLE IF NOT EXISTS printing_requests (
   payment_status TEXT DEFAULT 'unpaid' CHECK (payment_status IN ('paid', 'unpaid')),
   
   -- Status
-  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'ready', 'completed', 'cancelled'))
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'ready', 'completed', 'cancelled')),
+  admin_notes TEXT
 );
+
+-- Add admin_notes for existing tables
+ALTER TABLE printing_requests ADD COLUMN IF NOT EXISTS admin_notes TEXT;
 
 -- Create indexes
 CREATE INDEX idx_printing_requests_status ON printing_requests(status);

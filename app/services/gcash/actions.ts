@@ -114,27 +114,22 @@ export async function submitGCashRequest(
     };
 
     // Insert into database
-    const { data: insertedData, error: insertError } = await supabase
+    const { error: insertError } = await supabase
       .from('gcash_requests')
-      .insert(insertData)
-      .select()
-      .single();
+      .insert(insertData);
 
     if (insertError) {
       console.error('Database insert error:', insertError);
-      return { success: false, error: 'Failed to submit request' };
+      return { success: false, error: insertError.message || 'Failed to submit request' };
     }
 
     // Revalidate admin pages
     revalidatePath('/admin/gcash');
 
-    return { 
-      success: true, 
-      data: { id: insertedData.id }
-    };
-  } catch (error) {
+    return { success: true };
+  } catch (error: any) {
     console.error('Submit GCash request error:', error);
-    return { success: false, error: 'Failed to submit request' };
+    return { success: false, error: error?.message || 'Failed to submit request' };
   }
 }
 

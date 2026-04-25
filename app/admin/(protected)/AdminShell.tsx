@@ -35,6 +35,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
 
   const [signingOut, setSigningOut] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
+  const isOrdersWorkspace = pathname?.startsWith("/admin/orders");
 
   // ✅ PACK F: CLEAN NAVIGATION STRUCTURE
   // Grouped by operational workflow for better discoverability
@@ -132,7 +133,11 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-stone-50 via-white to-amber-50/30">
-      <div className="mx-auto grid max-w-6xl grid-cols-1 gap-4 px-4 py-6 md:grid-cols-[240px_1fr]">
+      <div
+        className={`mx-auto grid grid-cols-1 gap-4 px-4 py-6 md:grid-cols-[240px_1fr] ${
+          isOrdersWorkspace ? "max-w-none" : "max-w-6xl"
+        }`}
+      >
         <aside>
           <div className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
             <div className="mb-4 flex items-center gap-2 border-b border-stone-200 pb-3">
@@ -231,9 +236,13 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
         </aside>
 
         <main className="min-w-0">
-          <div className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
-            {children}
-          </div>
+          {isOrdersWorkspace ? (
+            <div className="min-h-full">{children}</div>
+          ) : (
+            <div className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
+              {children}
+            </div>
+          )}
         </main>
       </div>
     </div>

@@ -1,5 +1,9 @@
 "use client";
 
+// ⚠️ DEPRECATED: This component is no longer used by the active checkout flow.
+// The canonical checkout is at app/checkout/CheckoutClient.tsx
+// Keeping for reference only. Do not import in new code.
+
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { supabaseBrowser } from "@/lib/supabase/browser";

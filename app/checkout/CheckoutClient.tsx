@@ -442,6 +442,27 @@ export default function CheckoutClient({ initialSettings, paymentEnums }: Checko
           }
         }
 
+        // Enforce checkout order confirmation policy:
+        // - GCash: auto-confirm order
+        // - COD/Credit: stay pending for manual admin confirmation
+        // This updates order status only and never touches payment status.
+        try {
+          const desiredStatus = paymentMethod === "gcash" ? "confirmed" : "pending";
+          const { error: orderStatusError } = await supabase
+            .from("orders")
+            .update({
+              status: desiredStatus,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", order_id);
+
+          if (orderStatusError) {
+            console.error("Failed to apply order status policy:", orderStatusError);
+          }
+        } catch (orderStatusErr) {
+          console.error("Order status policy error:", orderStatusErr);
+        }
+
         // ✅ NEW: Save name to history for autocomplete
         try {
           const memory = JSON.parse(localStorage.getItem(CUSTOMER_MEMORY_KEY) || "{}");

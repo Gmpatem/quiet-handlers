@@ -88,13 +88,13 @@ export default function GCashServiceClient() {
 
     const nameValidation = validateName(studentName);
     if (!nameValidation.isValid) {
-      setError(nameValidation.error);
+      setError(nameValidation.error || '');
       return;
     }
 
     const contactValidation = validatePhilippineMobileNumber(studentContact);
     if (!contactValidation.isValid) {
-      setError(contactValidation.error);
+      setError(contactValidation.error || '');
       return;
     }
 

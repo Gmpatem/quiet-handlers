@@ -9,18 +9,24 @@ CREATE TABLE IF NOT EXISTS gcash_requests (
   student_contact TEXT NOT NULL,
   
   -- Transaction Details
-  transaction_type TEXT NOT NULL CHECK (transaction_type IN ('cash_in', 'send_money', 'bills_payment', 'buy_load')),
+  transaction_type TEXT NOT NULL CHECK (transaction_type IN ('cash_in', 'cash_out')),
   amount DECIMAL(10,2) NOT NULL,
   service_fee DECIMAL(10,2) NOT NULL,
   total_amount DECIMAL(10,2) NOT NULL,
   
   -- Payment Proof
-  payment_proof_url TEXT NOT NULL,
+  payment_proof_url TEXT,
   
   -- Status
   status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'cancelled')),
   admin_notes TEXT
 );
+
+-- Migration safety for existing deployments
+ALTER TABLE gcash_requests DROP CONSTRAINT IF EXISTS gcash_requests_transaction_type_check;
+ALTER TABLE gcash_requests ADD CONSTRAINT gcash_requests_transaction_type_check
+  CHECK (transaction_type IN ('cash_in', 'cash_out'));
+ALTER TABLE gcash_requests ALTER COLUMN payment_proof_url DROP NOT NULL;
 
 -- Create indexes
 CREATE INDEX idx_gcash_requests_status ON gcash_requests(status);

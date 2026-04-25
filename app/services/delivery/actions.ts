@@ -108,27 +108,22 @@ export async function submitDeliveryRequest(
     };
 
     // Insert into database
-    const { data: insertedData, error: insertError } = await supabase
+    const { error: insertError } = await supabase
       .from('delivery_requests')
-      .insert(insertData)
-      .select()
-      .single();
+      .insert(insertData);
 
     if (insertError) {
       console.error('Database insert error:', insertError);
-      return { success: false, error: 'Failed to submit request' };
+      return { success: false, error: insertError.message || 'Failed to submit request' };
     }
 
     // Revalidate admin pages
     revalidatePath('/admin/deliveries');
 
-    return { 
-      success: true, 
-      data: { id: insertedData.id }
-    };
-  } catch (error) {
+    return { success: true };
+  } catch (error: any) {
     console.error('Submit delivery request error:', error);
-    return { success: false, error: 'Failed to submit request' };
+    return { success: false, error: error?.message || 'Failed to submit request' };
   }
 }
 
@@ -183,7 +178,7 @@ export async function submitCompleteDeliveryRequest(formData: FormData): Promise
  */
 export async function updateDeliveryStatus(
   requestId: string,
-  newStatus: 'pending' | 'processing' | 'completed' | 'cancelled',
+  newStatus: 'pending' | 'processing' | 'out_for_delivery' | 'completed' | 'cancelled',
   riderName?: string,
   adminNotes?: string
 ): Promise<ActionResult> {

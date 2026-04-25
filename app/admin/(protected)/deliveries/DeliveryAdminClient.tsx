@@ -15,7 +15,7 @@ type DeliveryRequest = {
   delivery_fee: number;
   payment_proof_url?: string;
   payment_status: 'paid' | 'unpaid';
-  status: 'pending' | 'processing' | 'completed' | 'cancelled';
+  status: 'pending' | 'processing' | 'out_for_delivery' | 'completed' | 'cancelled';
   admin_notes?: string;
 };
 
@@ -141,6 +141,7 @@ export default function DeliveryAdminClient() {
     switch (status) {
       case 'pending': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
       case 'processing': return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'out_for_delivery': return 'bg-orange-100 text-orange-800 border-orange-200';
       case 'completed': return 'bg-green-100 text-green-800 border-green-200';
       case 'cancelled': return 'bg-red-100 text-red-800 border-red-200';
       default: return 'bg-stone-100 text-stone-800 border-stone-200';
@@ -213,7 +214,7 @@ export default function DeliveryAdminClient() {
             </div>
 
             <div className="flex gap-2 overflow-x-auto pb-2 sm:pb-0">
-              {['all', 'pending', 'processing', 'completed', 'cancelled'].map(status => (
+              {['all', 'pending', 'processing', 'out_for_delivery', 'completed', 'cancelled'].map(status => (
                 <button
                   key={status}
                   onClick={() => setSelectedStatus(status)}
@@ -389,7 +390,7 @@ export default function DeliveryAdminClient() {
               <div>
                 <h3 className="text-sm font-semibold text-stone-500 uppercase mb-3">Update Status</h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {['pending', 'processing', 'completed', 'cancelled'].map(status => (
+                  {['pending', 'processing', 'out_for_delivery', 'completed', 'cancelled'].map(status => (
                     <button
                       key={status}
                       onClick={() => updateRequest(selectedRequest.id, {
