@@ -1,18 +1,22 @@
 "use client";
 
 import { Package } from "lucide-react";
+import type { KeyboardEvent, ReactNode } from "react";
 import type { OrderItemRow, OrderRow, PaymentRow } from "../OrdersClient";
 import { locationLabel, peso, timeAgo } from "../lib/labels";
 import { OrderStatusBadge } from "./OrderStatusBadge";
 import { PaymentBadge } from "./PaymentBadge";
 import { PaymentTypeBadge } from "./PaymentTypeBadge";
 import { OrderActionButtons } from "./OrderActionButtons";
+import { MobileOrderActions } from "./MobileOrderActions";
 import { isPaymentSettled, getCreditBalanceDue } from "@/lib/payments";
 
 interface Props {
   orders: OrderRow[];
   payments: PaymentRow[];
   items: OrderItemRow[];
+  selectedOrderId?: string | null;
+  onSelectOrder?: (order: OrderRow) => void;
   onUpdateStatus: (orderId: string, status: string) => void | Promise<void>;
   onVerifyPayment: (
     paymentId: string,
@@ -60,9 +64,9 @@ function rowAccent(order: OrderRow, payment: PaymentRow | undefined): string {
   return "border-l-transparent";
 }
 
-const GRID_COLS = "150px 120px minmax(300px,1fr) 90px 110px 140px 110px 220px";
+const GRID_COLS = "160px 130px minmax(420px, 1fr) 90px 120px 170px 120px 220px";
 
-function GridHeaderCell({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+function GridHeaderCell({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
     <div className={`flex items-center py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-stone-400 ${className}`}>
       {children}
@@ -70,7 +74,7 @@ function GridHeaderCell({ children, className = "" }: { children: React.ReactNod
   );
 }
 
-function GridCell({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+function GridCell({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
     <div className={`flex items-center py-2 ${className}`}>
       {children}
@@ -82,6 +86,8 @@ export function OrdersTable({
   orders,
   payments,
   items,
+  selectedOrderId,
+  onSelectOrder,
   onUpdateStatus,
   onVerifyPayment,
   onMarkPaymentPaid,
@@ -102,7 +108,7 @@ export function OrdersTable({
     <>
       {/* Desktop — CSS grid table with horizontal scroll */}
       <div className="hidden overflow-x-auto md:block">
-        <div style={{ minWidth: "1100px" }}>
+        <div>
           {/* Sticky header */}
           <div
             className="sticky top-0 z-10 border-b border-stone-200 bg-stone-50"
@@ -125,11 +131,31 @@ export function OrdersTable({
             const location = orderLocation(order);
             const itemsPreview = orderItemsPreview(items, order.id);
             const accent = rowAccent(order, payment);
+            const isSelected = selectedOrderId === order.id;
 
             return (
               <div
                 key={order.id}
-                className={`border-b border-stone-100 transition-colors hover:bg-stone-50/80 ${accent}`}
+                role={onSelectOrder ? "button" : undefined}
+                tabIndex={onSelectOrder ? 0 : undefined}
+                aria-selected={isSelected}
+                onClick={() => onSelectOrder?.(order)}
+                onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
+                  if (!onSelectOrder) return;
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onSelectOrder(order);
+                  }
+                }}
+                className={`border-b border-stone-100 transition-colors ${
+                  onSelectOrder
+                    ? "cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+                    : ""
+                } ${
+                  isSelected
+                    ? "bg-amber-50/80 ring-1 ring-inset ring-amber-200"
+                    : "hover:bg-stone-50/80"
+                } ${accent}`}
                 style={{ display: "grid", gridTemplateColumns: GRID_COLS, minHeight: "72px" }}
               >
                 {/* Order / Customer */}
@@ -200,55 +226,80 @@ export function OrdersTable({
         </div>
       </div>
 
-      {/* Mobile cards */}
-      <div className="divide-y divide-stone-100 md:hidden">
+      {/* Mobile */}
+      <div className="md:hidden">
         {orders.map((order) => {
           const payment = getLatestPayment(payments, order.id);
           const code = order.order_code ?? order.id.slice(0, 8);
           const location = orderLocation(order);
           const itemsPreview = orderItemsPreview(items, order.id);
           const accent = rowAccent(order, payment);
+          const isSelected = selectedOrderId === order.id;
 
           return (
-            <div key={order.id} className={`px-4 py-3 ${accent}`}>
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-[11px] font-bold text-stone-500">{code}</span>
-                  <OrderStatusBadge status={order.status} size="sm" />
-                </div>
-                <span className="text-sm font-bold tabular-nums text-stone-900">
+            <div
+              key={order.id}
+              role={onSelectOrder ? "button" : undefined}
+              tabIndex={onSelectOrder ? 0 : undefined}
+              aria-selected={isSelected}
+              onClick={() => onSelectOrder?.(order)}
+              onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
+                if (!onSelectOrder) return;
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onSelectOrder(order);
+                }
+              }}
+              className={`border-b border-stone-100 px-4 py-3.5 transition ${
+                onSelectOrder
+                  ? "cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+                  : ""
+              } ${
+                isSelected ? "bg-amber-50/80 ring-1 ring-inset ring-amber-200" : ""
+              } ${accent}`}
+            >
+              {/* Line 1: Code + Total */}
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-sm font-bold text-stone-600">{code}</span>
+                <span className="text-base font-bold tabular-nums text-stone-900">
                   {peso(order.total_cents)}
                 </span>
               </div>
 
-              <div className="mt-1 flex items-center gap-1.5 text-xs text-stone-700">
+              {/* Line 2: Customer + Location */}
+              <div className="mt-1 text-sm text-stone-700">
                 <span className="font-semibold">{order.customer_name || "—"}</span>
-                <span className="text-stone-300">·</span>
-                <span className="text-amber-700">{location}</span>
+                <span className="mx-1.5 text-stone-300">·</span>
+                <span className="font-medium text-amber-700">{location}</span>
               </div>
 
-              <div className="mt-0.5 text-sm leading-snug text-stone-700 whitespace-normal break-words line-clamp-4">{itemsPreview}</div>
-
-              <div className="mt-0.5 text-[11px] text-stone-400">
+              {/* Line 3: Contact + Time */}
+              <div className="mt-0.5 text-xs text-stone-400">
                 {order.contact?.trim() || "No contact"} · {timeAgo(order.created_at)}
               </div>
 
-              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                <PaymentTypeBadge payment={payment} order={order} />
-                <PaymentBadge payment={payment} order={order} />
+              {/* Line 4: Items */}
+              <div className="mt-1.5 text-sm leading-snug text-stone-600 whitespace-normal break-words line-clamp-3">
+                {itemsPreview}
               </div>
 
-              <div className="mt-2">
-                <OrderActionButtons
-                  order={order}
-                  payment={payment}
-                  onUpdateStatus={onUpdateStatus}
-                  onVerifyPayment={onVerifyPayment}
-                  onMarkPaymentPaid={onMarkPaymentPaid}
-                  onRecordRepayment={onRecordRepayment}
-                  onDeleteOrder={onDeleteOrder}
-                />
+              {/* Line 5: Badges */}
+              <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                <PaymentTypeBadge payment={payment} order={order} />
+                <PaymentBadge payment={payment} order={order} />
+                <OrderStatusBadge status={order.status} size="sm" />
               </div>
+
+              {/* Line 6: Mobile actions */}
+              <MobileOrderActions
+                order={order}
+                payment={payment}
+                onUpdateStatus={onUpdateStatus}
+                onVerifyPayment={onVerifyPayment}
+                onMarkPaymentPaid={onMarkPaymentPaid}
+                onRecordRepayment={onRecordRepayment}
+                onDeleteOrder={onDeleteOrder}
+              />
             </div>
           );
         })}

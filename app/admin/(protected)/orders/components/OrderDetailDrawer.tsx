@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
 import type { ReactNode } from "react";
-import { X } from "lucide-react";
 import type { OrderItemRow, OrderRow, PaymentRow } from "../OrdersClient";
+import { AdminDetailDrawer } from "../../components/workflow/AdminDetailDrawer";
 import { OrderStatusBadge } from "./OrderStatusBadge";
 import { PaymentBadge } from "./PaymentBadge";
 import { OrderActionButtons } from "./OrderActionButtons";
@@ -57,17 +56,6 @@ export function OrderDetailDrawer({
   onRecordRepayment,
   onDeleteOrder,
 }: Props) {
-  useEffect(() => {
-    if (!open) return;
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, onClose]);
-
   if (!open || !order) {
     return null;
   }
@@ -83,36 +71,13 @@ export function OrderDetailDrawer({
   const reference = payment?.reference_number ?? payment?.gcash_ref ?? null;
 
   return (
-    <div className="fixed inset-0 z-50">
-      <button
-        type="button"
-        className="absolute inset-0 bg-stone-900/40"
-        onClick={onClose}
-        aria-label="Close drawer overlay"
-      />
-
-      <aside className="absolute inset-y-0 right-0 flex w-full max-w-2xl flex-col bg-white shadow-2xl">
-        <div className="flex items-start justify-between border-b border-stone-200 px-5 py-4">
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-wide text-stone-500">
-              Order Details
-            </div>
-            <h2 className="mt-1 font-mono text-lg font-bold text-stone-900">
-              {orderCode}
-            </h2>
-            <p className="text-xs text-stone-500">{formatTime(order.created_at)}</p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-stone-200 p-1.5 text-stone-500 transition hover:bg-stone-50"
-            aria-label="Close order details"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        <div className="flex-1 space-y-5 overflow-y-auto p-5">
+    <AdminDetailDrawer
+      open={open}
+      title={orderCode}
+      description={formatTime(order.created_at)}
+      onClose={onClose}
+    >
+        <div className="space-y-5">
           <section className="space-y-2 rounded-xl border border-stone-200 bg-stone-50 p-4">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-stone-900">Order Header</h3>
@@ -238,7 +203,6 @@ export function OrderDetailDrawer({
             />
           </section>
         </div>
-      </aside>
-    </div>
+    </AdminDetailDrawer>
   );
 }

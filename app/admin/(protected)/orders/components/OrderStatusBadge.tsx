@@ -43,7 +43,7 @@ export function OrderStatusBadge({ status, size = "md" }: Props) {
   const label = statusLabel(status);
   const padding =
     size === "sm"
-      ? "px-1.5 py-0.5 text-[10px] gap-0.5"
+      ? "px-2 py-1 text-xs gap-1 md:px-1.5 md:py-0.5 md:text-[10px] md:gap-0.5"
       : "px-2 py-1 text-xs gap-1";
 
   return (

@@ -26,7 +26,7 @@ export function PaymentTypeBadge({ payment, order }: Props) {
 
   return (
     <span
-      className={`inline-flex shrink-0 whitespace-nowrap rounded border px-1.5 py-px text-[10px] font-semibold ${tone}`}
+      className={`inline-flex shrink-0 whitespace-nowrap rounded border px-2 py-1 text-xs font-semibold md:px-1.5 md:py-px md:text-[10px] ${tone}`}
     >
       {label}
     </span>

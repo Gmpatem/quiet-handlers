@@ -35,7 +35,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
 
   const [signingOut, setSigningOut] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
-  const isOrdersWorkspace = pathname?.startsWith("/admin/orders");
+  const isOrdersWorkspace = !!pathname && pathname.startsWith("/admin/orders");
 
   // ✅ PACK F: CLEAN NAVIGATION STRUCTURE
   // Grouped by operational workflow for better discoverability
@@ -138,8 +138,8 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
           isOrdersWorkspace ? "max-w-none" : "max-w-6xl"
         }`}
       >
-        <aside>
-          <div className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
+        <aside className="md:sticky md:top-4 md:self-start">
+          <div className="max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
             <div className="mb-4 flex items-center gap-2 border-b border-stone-200 pb-3">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-stone-600 to-amber-900 text-xs font-bold text-white shadow-sm">
                 FDS
