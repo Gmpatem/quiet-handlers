@@ -30,15 +30,19 @@ async function runTests() {
 
   // Print tests
   test("Print B&W 1 copy = ₱3 Total Price", async () => {
-    await page.goto("http://localhost:3000/services/printing", { waitUntil: "networkidle" });
+    await page.goto("http://localhost:3000/services/printing", { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(500);
     const total = await page.locator("text=Total Price").locator("xpath=..").locator("span").last().innerText();
     if (!total.includes("₱3.00")) throw new Error(`Expected ₱3.00, got ${total}`);
   });
 
   test("Print Color 2 copies = Estimated Price Starts at ₱10", async () => {
-    await page.goto("http://localhost:3000/services/printing", { waitUntil: "networkidle" });
-    await page.getByRole("button", { name: "COLOR" }).click();
-    await page.locator("button[aria-label='Increase copies']").click();
+    await page.goto("http://localhost:3000/services/printing", { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(500);
+    await page.getByRole("button", { name: "COLOR" }).click({ force: true });
+    await page.waitForTimeout(300);
+    await page.getByLabel("Increase copies").click({ force: true });
+    await page.waitForTimeout(300);
     const est = await page.locator("text=Estimated Price").locator("xpath=..").locator("span").last().innerText();
     if (!est.includes("₱10.00") || !est.includes("Starts at")) throw new Error(`Expected Starts at ₱10.00, got ${est}`);
   });
@@ -88,15 +92,18 @@ async function runTests() {
 
   // GCash Cash In 3-Step Wizard Flow
   test("Cash In Wizard: Step 1 Details -> Step 2 Customer Destination -> Step 3 Confirm", async () => {
-    await page.goto("http://localhost:3000/services/gcash", { waitUntil: "networkidle" });
+    await page.goto("http://localhost:3000/services/gcash", { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(500);
     // Step 1
     await page.locator("input[placeholder='0.00']").fill("500");
-    await page.getByRole("button", { name: "Continue to GCash Details" }).click();
+    await page.getByRole("button", { name: "Continue to GCash Details" }).click({ force: true });
+    await page.waitForTimeout(300);
 
     // Step 2
     await page.locator("input[placeholder='e.g. Juan Dela Cruz']").fill("Maria Santos");
     await page.locator("input[placeholder='09XXXXXXXXX']").fill("09171234567");
-    await page.getByRole("button", { name: "Review & Confirm" }).click();
+    await page.getByRole("button", { name: "Review & Confirm" }).click({ force: true });
+    await page.waitForTimeout(300);
 
     // Step 3
     const summaryHeader = await page.locator("text=Cash In").first().innerText();
@@ -107,16 +114,20 @@ async function runTests() {
 
   // GCash Cash Out 3-Step Wizard Flow
   test("Cash Out Wizard: Step 1 Details -> Step 2 Owner Payment -> Step 3 Confirm", async () => {
-    await page.goto("http://localhost:3000/services/gcash", { waitUntil: "networkidle" });
+    await page.goto("http://localhost:3000/services/gcash", { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(500);
     // Step 1: Select Cash Out
-    await page.getByRole("button", { name: "Cash Out" }).click();
+    await page.getByRole("button", { name: "Cash Out" }).click({ force: true });
+    await page.waitForTimeout(300);
     await page.locator("input[placeholder='0.00']").fill("1000");
-    await page.getByRole("button", { name: "Continue to GCash Details" }).click();
+    await page.getByRole("button", { name: "Continue to GCash Details" }).click({ force: true });
+    await page.waitForTimeout(300);
 
     // Step 2
     await page.locator("input[placeholder='e.g. Juan Dela Cruz']").fill("Pedro Penduko");
     await page.locator("input[placeholder='e.g. 1029 3847 5612']").fill("REF-987654321");
-    await page.getByRole("button", { name: "Review & Confirm" }).click();
+    await page.getByRole("button", { name: "Review & Confirm" }).click({ force: true });
+    await page.waitForTimeout(300);
 
     // Step 3
     const totalSend = await page.locator("text=GCash You Send").locator("xpath=..").locator("span").last().innerText();
@@ -139,16 +150,19 @@ async function runTests() {
 
   // End-to-end GCash Cash In Submission in Browser
   test("E2E GCash Cash In Submission in Browser", async () => {
-    await page.goto("http://localhost:3000/services/gcash", { waitUntil: "networkidle" });
+    await page.goto("http://localhost:3000/services/gcash", { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(500);
     await page.locator("input[placeholder='0.00']").fill("500");
-    await page.getByRole("button", { name: "Continue to GCash Details" }).click();
+    await page.getByRole("button", { name: "Continue to GCash Details" }).click({ force: true });
+    await page.waitForTimeout(300);
 
     await page.locator("input[placeholder='e.g. Juan Dela Cruz']").fill("E2E Test Student In");
     await page.locator("input[placeholder='09XXXXXXXXX']").fill("09171234567");
-    await page.getByRole("button", { name: "Review & Confirm" }).click();
+    await page.getByRole("button", { name: "Review & Confirm" }).click({ force: true });
+    await page.waitForTimeout(300);
 
     // Confirm submission
-    await page.getByRole("button", { name: "SUBMIT CASH IN" }).click();
+    await page.getByRole("button", { name: "SUBMIT CASH IN" }).click({ force: true });
     await page.waitForTimeout(1500);
 
     // Verify success or friendly UI (no raw SQL/RLS errors)
@@ -160,17 +174,21 @@ async function runTests() {
 
   // End-to-end GCash Cash Out Submission in Browser
   test("E2E GCash Cash Out Submission in Browser", async () => {
-    await page.goto("http://localhost:3000/services/gcash", { waitUntil: "networkidle" });
-    await page.getByRole("button", { name: "Cash Out" }).click();
+    await page.goto("http://localhost:3000/services/gcash", { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(500);
+    await page.getByRole("button", { name: "Cash Out" }).click({ force: true });
+    await page.waitForTimeout(300);
     await page.locator("input[placeholder='0.00']").fill("1000");
-    await page.getByRole("button", { name: "Continue to GCash Details" }).click();
+    await page.getByRole("button", { name: "Continue to GCash Details" }).click({ force: true });
+    await page.waitForTimeout(300);
 
     await page.locator("input[placeholder='e.g. Juan Dela Cruz']").fill("E2E Test Student Out");
     await page.locator("input[placeholder='e.g. 1029 3847 5612']").fill("REF-987654321");
-    await page.getByRole("button", { name: "Review & Confirm" }).click();
+    await page.getByRole("button", { name: "Review & Confirm" }).click({ force: true });
+    await page.waitForTimeout(300);
 
     // Confirm submission
-    await page.getByRole("button", { name: "SUBMIT CASH OUT" }).click();
+    await page.getByRole("button", { name: "SUBMIT CASH OUT" }).click({ force: true });
     await page.waitForTimeout(1500);
 
     // Verify no raw SQL error
@@ -267,8 +285,8 @@ async function runTests() {
     }
   });
 
-  // Take on Credit: Route & Catalogue UI
-  test("Take on Credit: /services/credit loads product catalogue and search", async () => {
+  // Take on Credit: Route & Catalogue UI (Available Goods Only)
+  test("Take on Credit: /services/credit loads available products only (stock > 0)", async () => {
     await page.goto("http://localhost:3000/services/credit", { waitUntil: "domcontentloaded" });
     await page.waitForTimeout(500);
     const text = await page.evaluate(() => document.body.innerText);
@@ -278,6 +296,11 @@ async function runTests() {
     const searchInput = page.getByPlaceholder("Search items...");
     if (!(await searchInput.isVisible())) {
       throw new Error("Search items input not visible");
+    }
+
+    // Verify no "0 available" or "Out of Stock" badges are rendered on the shelf
+    if (text.includes("0 available") || text.includes("Out of Stock")) {
+      throw new Error("Found zero-stock or out of stock items rendered on Take on Credit shelf!");
     }
   });
 

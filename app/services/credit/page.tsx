@@ -18,6 +18,7 @@ export default async function CreditServicePage() {
       .from("products")
       .select("id, name, category, price_cents, stock_qty, is_active, photo_url, badge_text")
       .eq("is_active", true)
+      .gt("stock_qty", 0)
       .order("name", { ascending: true })
       .limit(100);
 

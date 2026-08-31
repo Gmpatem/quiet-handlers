@@ -67,22 +67,26 @@ export default function CreditServiceClient({
     }
   }, []);
 
-  // Extract existing categories
+  // Only available products (active and in stock > 0)
+  const availableProducts = useMemo(() => {
+    return initialProducts.filter((p) => p.is_active && p.stock_qty > 0);
+  }, [initialProducts]);
+
+  // Extract existing categories from available products
   const categories = useMemo(() => {
     const set = new Set<string>();
-    for (const p of initialProducts) {
+    for (const p of availableProducts) {
       if (p.category && p.category.trim()) {
         set.add(p.category.trim().toUpperCase());
       }
     }
     return ["ALL", ...Array.from(set).sort()];
-  }, [initialProducts]);
+  }, [availableProducts]);
 
   // Filtered catalogue
   const filteredProducts = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    return initialProducts.filter((p) => {
-      if (p.stock_qty < 0) return false;
+    return availableProducts.filter((p) => {
       const matchesQuery =
         !q ||
         p.name.toLowerCase().includes(q) ||
@@ -94,12 +98,12 @@ export default function CreditServiceClient({
 
       return matchesQuery && matchesCat;
     });
-  }, [initialProducts, searchQuery, selectedCategory]);
+  }, [availableProducts, searchQuery, selectedCategory]);
 
   // Product map for quick lookup
   const productMap = useMemo(() => {
-    return new Map(initialProducts.map((p) => [p.id, p]));
-  }, [initialProducts]);
+    return new Map(availableProducts.map((p) => [p.id, p]));
+  }, [availableProducts]);
 
   // Cart summary calculations
   const cartItemsList = useMemo(() => {
@@ -285,10 +289,18 @@ export default function CreditServiceClient({
             )}
 
             {/* Product Shelf Grid (2 columns on mobile) */}
-            {filteredProducts.length === 0 ? (
-              <div className="rounded-2xl border-2 border-dashed border-stone-200 bg-white p-8 text-center">
+            {availableProducts.length === 0 ? (
+              <div className="rounded-2xl border-2 border-dashed border-stone-200 bg-white p-10 text-center shadow-xs">
+                <Package className="mx-auto h-12 w-12 text-stone-300 mb-3" />
+                <h3 className="text-base font-extrabold uppercase tracking-wide text-stone-900">
+                  NO ITEMS AVAILABLE RIGHT NOW
+                </h3>
+                <p className="text-xs text-stone-500 mt-1">Please check again later.</p>
+              </div>
+            ) : filteredProducts.length === 0 ? (
+              <div className="rounded-2xl border-2 border-dashed border-stone-200 bg-white p-8 text-center shadow-xs">
                 <Package className="mx-auto h-10 w-10 text-stone-300 mb-2" />
-                <p className="text-sm font-bold text-stone-700">No items found</p>
+                <p className="text-sm font-bold text-stone-700">No matching items found</p>
                 <p className="text-xs text-stone-400 mt-1">
                   Try searching with a different keyword or category.
                 </p>
@@ -297,7 +309,6 @@ export default function CreditServiceClient({
               <div className="grid grid-cols-2 gap-3 sm:gap-4">
                 {filteredProducts.map((product) => {
                   const currentQty = cart[product.id] || 0;
-                  const isOutOfStock = product.stock_qty <= 0;
 
                   return (
                     <div
@@ -327,14 +338,6 @@ export default function CreditServiceClient({
                               {product.badge_text}
                             </span>
                           )}
-
-                          {isOutOfStock && (
-                            <div className="absolute inset-0 flex items-center justify-center bg-white/80 backdrop-blur-[1px]">
-                              <span className="rounded-lg bg-stone-900 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-white">
-                                Out of Stock
-                              </span>
-                            </div>
-                          )}
                         </div>
 
                         {/* Title & Price */}
@@ -350,16 +353,12 @@ export default function CreditServiceClient({
                       <div className="mt-3 pt-2 border-t border-stone-100 flex items-center justify-between">
                         <span
                           className={`text-[11px] font-semibold ${
-                            isOutOfStock
-                              ? "text-red-500 font-bold"
-                              : product.stock_qty <= 3
+                            product.stock_qty <= 3
                               ? "text-orange-600 font-bold"
                               : "text-stone-500"
                           }`}
                         >
-                          {isOutOfStock
-                            ? "0 available"
-                            : `${product.stock_qty} left`}
+                          {product.stock_qty} left
                         </span>
 
                         {/* Direct Quantity Controls on Card */}
@@ -367,8 +366,7 @@ export default function CreditServiceClient({
                           <button
                             type="button"
                             onClick={() => handleIncrement(product.id)}
-                            disabled={isOutOfStock}
-                            className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-800 text-white shadow-sm hover:bg-amber-900 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed transition"
+                            className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-800 text-white shadow-sm hover:bg-amber-900 active:scale-95 transition"
                             aria-label={`Add ${product.name}`}
                           >
                             <Plus className="h-4 w-4" />
