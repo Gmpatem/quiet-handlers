@@ -1,146 +1,111 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from "react";
+import { Printer, User, FileText, CheckCircle, Minus, Plus, Send, X } from "lucide-react";
+import {
+  calculatePrintPrice,
+  formatPeso,
+  type PrintPricingSettings,
+  type ColorType,
+  type PaperSize,
+  type SidedType,
+} from "@/lib/printing/pricing";
 
-export default function PrintingServiceClient() {
+export type PrintingServiceClientProps = {
+  initialSettings: PrintPricingSettings;
+};
+
+export default function PrintingServiceClient({ initialSettings }: PrintingServiceClientProps) {
   const [mounted, setMounted] = useState(false);
-  const [name, setName] = useState('');
-  const [serviceType, setServiceType] = useState<'print' | 'photocopy' | 'scan'>('print');
+  const [name, setName] = useState("");
   const [pdfFile, setPdfFile] = useState<File | null>(null);
-  const [colorType, setColorType] = useState<'bw' | 'color'>('bw');
-  const [paperSize, setPaperSize] = useState<'a4' | 'letter' | 'legal'>('a4');
-  const [pages, setPages] = useState(1);
+  const [colorType, setColorType] = useState<ColorType>("bw");
+  const [paperSize, setPaperSize] = useState<PaperSize>("a4");
   const [copies, setCopies] = useState(1);
-  const [sided, setSided] = useState<'single' | 'double'>('single');
-  const [binding, setBinding] = useState(false);
-  const [specialInstructions, setSpecialInstructions] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<'gcash' | 'cash'>('cash');
-  const [paymentProof, setPaymentProof] = useState<File | null>(null);
+  const [sided, setSided] = useState<SidedType>("single");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState<{ requestId: string } | null>(null);
+
+  const settings = initialSettings;
 
   useEffect(() => {
     setMounted(true);
-    const savedName = localStorage.getItem('fds_user_name');
+    const savedName = localStorage.getItem("fds_user_name");
     if (savedName) setName(savedName);
   }, []);
 
-  // Pricing per business requirements:
-  // - Black & White: ₱3 per page
-  // - Color: ₱5 per page
-  const PRICING = {
-    print: { bw: 3, color: 5 },
-    photocopy: { bw: 2, color: 5 },
-    scan: { bw: 3, color: 5 },
-  };
-
-  const calculateTotal = () => {
-    let basePrice = PRICING[serviceType][colorType];
-    let total = basePrice * pages * copies;
-    
-    if (sided === 'double') total *= 0.75;
-    if (binding) total += 20;
-    
-    return total;
-  };
+  const pricing = useMemo(
+    () => calculatePrintPrice(settings, colorType, paperSize, copies, sided),
+    [settings, colorType, paperSize, copies, sided]
+  );
 
   const handlePdfUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      if (file.type === 'application/pdf') {
-        setPdfFile(file);
-        console.log('PDF uploaded:', file.name);
-      } else {
-        alert('Please upload a PDF file');
-        e.target.value = '';
-      }
+    if (!file) return;
+    if (file.type === "application/pdf") {
+      setPdfFile(file);
+      setError("");
+    } else {
+      setError("Please upload a PDF file");
+      e.target.value = "";
     }
   };
 
-  const handlePaymentProofUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.type.startsWith('image/')) {
-        setPaymentProof(file);
-        console.log('Payment proof uploaded:', file.name);
-      } else {
-        alert('Please upload an image file');
-        e.target.value = '';
-      }
-    }
+  const adjustCopies = (delta: number) => {
+    setCopies((prev) => Math.max(1, Math.min(99, prev + delta)));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError("");
 
-    // Validation
     if (!name.trim()) {
-      alert('Please enter your name');
+      setError("Please enter your name");
       return;
     }
-
-    if (serviceType === 'print' && !pdfFile) {
-      alert('Please upload a PDF file for printing');
-      return;
-    }
-
-    if (paymentMethod === 'gcash' && !paymentProof) {
-      alert('Please upload payment proof for GCash payment');
+    if (!pdfFile) {
+      setError("Please upload a PDF file");
       return;
     }
 
     setIsSubmitting(true);
 
     try {
-      // Save name to localStorage
-      localStorage.setItem('fds_user_name', name);
+      localStorage.setItem("fds_user_name", name);
 
-      // Create FormData
       const formData = new FormData();
-      formData.append('studentName', name);
-      formData.append('serviceType', serviceType);
-      formData.append('colorType', colorType);
-      formData.append('paperSize', paperSize);
-      formData.append('pages', pages.toString());
-      formData.append('copies', copies.toString());
-      formData.append('sided', sided);
-      formData.append('binding', binding.toString());
-      formData.append('specialInstructions', specialInstructions);
-      formData.append('paymentMethod', paymentMethod);
-      formData.append('totalAmount', calculateTotal().toString());
-      
-      if (pdfFile) {
-        formData.append('pdfFile', pdfFile);
-      }
-      
-      if (paymentProof) {
-        formData.append('paymentProof', paymentProof);
-      }
+      formData.append("studentName", name);
+      formData.append("serviceType", "print");
+      formData.append("colorType", colorType);
+      formData.append("paperSize", paperSize);
+      formData.append("pages", "1");
+      formData.append("copies", copies.toString());
+      formData.append("sided", sided);
+      formData.append("binding", "false");
+      formData.append("specialInstructions", "");
+      formData.append("paymentMethod", "cash");
+      formData.append("totalAmount", pricing.total.toString());
+      formData.append("pdfFile", pdfFile);
 
-      // Fixed import path - use @/ alias or correct relative path
-      const { submitCompletePrintingRequest } = await import('@/app/services/printing/actions');
+      const { submitCompletePrintingRequest } = await import("@/app/services/printing/actions");
       const result = await submitCompletePrintingRequest(formData);
 
       if (result.success) {
-        alert('✅ Request submitted successfully!\n\nYou will be notified when ready for pickup at Room 411.');
-        
-        // Reset form
+        setSuccess({ requestId: result.requestId?.slice(0, 8) || "" });
         setPdfFile(null);
-        setPages(1);
         setCopies(1);
-        setSpecialInstructions('');
-        setPaymentProof(null);
-        setPaymentMethod('cash');
-        setBinding(false);
-        
-        // Reset file inputs
-        const fileInputs = document.querySelectorAll<HTMLInputElement>('input[type="file"]');
-        fileInputs.forEach(input => input.value = '');
+        setSided("single");
+        setColorType("bw");
+        setPaperSize("a4");
+        const fileInput = document.querySelector<HTMLInputElement>("input[type=file]");
+        if (fileInput) fileInput.value = "";
       } else {
-        alert(`❌ Failed to submit: ${result.error || 'Unknown error'}`);
+        setError(result.error || "Failed to submit request");
       }
-    } catch (error) {
-      console.error('Error submitting request:', error);
-      alert('❌ Failed to submit request. Please try again.');
+    } catch (err) {
+      console.error("Submit error:", err);
+      setError("Failed to submit request. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -148,309 +113,234 @@ export default function PrintingServiceClient() {
 
   if (!mounted) return null;
 
-  const total = calculateTotal();
+  if (success) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-stone-50 to-white px-4 py-8 flex items-center justify-center">
+        <div className="w-full max-w-sm rounded-3xl border border-stone-200 bg-white p-8 text-center shadow-xl">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
+            <CheckCircle className="h-8 w-8 text-emerald-700" />
+          </div>
+          <h2 className="text-xl font-bold text-stone-900">Printing request received</h2>
+          <p className="mt-1 text-sm text-stone-600">Request #{success.requestId}</p>
+          <button
+            onClick={() => setSuccess(null)}
+            className="mt-6 w-full rounded-xl bg-gradient-to-r from-amber-700 to-amber-900 py-3 font-semibold text-white shadow-md"
+          >
+            Done
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-stone-50 to-white pb-32 px-4 sm:px-6 lg:px-8">
-      {/* Header */}
-      <div className="max-w-5xl mx-auto pt-4 sm:pt-6 lg:pt-8 mb-4 sm:mb-6">
-        <div className="bg-gradient-to-br from-amber-700 to-amber-900 rounded-2xl p-4 sm:p-6 lg:p-8 shadow-xl">
-          <div className="flex items-center gap-3 sm:gap-4">
-            <div className="flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
-              <span className="text-2xl sm:text-3xl">🖨️</span>
-            </div>
-            <div>
-              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white">FDS Printing Services</h1>
-              <p className="text-amber-100 text-xs sm:text-sm mt-0.5">Print • Photocopy • Scan</p>
-            </div>
+    <div className="min-h-screen bg-gradient-to-b from-stone-50 to-white px-4 pb-28 pt-6">
+      <div className="mx-auto max-w-sm">
+        {/* Header */}
+        <div className="mb-6 flex items-center gap-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-800">
+            <Printer className="h-6 w-6" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-stone-900">PRINT HERE</h1>
+            <p className="text-sm text-stone-500">Fast. Simple. Done.</p>
           </div>
         </div>
-      </div>
 
-      {/* Service Selector */}
-      <div className="max-w-5xl mx-auto mb-6">
-        <div className="grid grid-cols-3 gap-2 sm:gap-3">
-          {(['print', 'photocopy', 'scan'] as const).map((type) => (
-            <button
-              key={type}
-              type="button"
-              onClick={() => setServiceType(type)}
-              className={`p-3 sm:p-4 rounded-xl border-2 transition-all ${
-                serviceType === type
-                  ? 'border-amber-700 bg-amber-50 shadow-md'
-                  : 'border-stone-200 bg-white hover:border-amber-300'
-              }`}
-            >
-              <div className="text-2xl sm:text-3xl mb-1 sm:mb-2">
-                {type === 'print' && '🖨️'}
-                {type === 'photocopy' && '📄'}
-                {type === 'scan' && '📷'}
-              </div>
-              <div className={`font-semibold text-xs sm:text-sm capitalize ${
-                serviceType === type ? 'text-amber-900' : 'text-stone-700'
-              }`}>
-                {type}
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Main Form */}
-      <form onSubmit={handleSubmit} className="max-w-5xl mx-auto">
-        <div className="bg-white rounded-2xl border-2 border-stone-200 shadow-lg overflow-hidden">
-          <div className="p-4 sm:p-6 lg:p-8 space-y-6">
-            {/* Student Name */}
-            <div>
-              <label className="block text-sm font-semibold text-stone-900 mb-2">
-                Your Name <span className="text-red-500">*</span>
-              </label>
+        <form onSubmit={handleSubmit} className="space-y-5">
+          {/* Name */}
+          <div>
+            <label className="mb-2 block text-sm font-semibold uppercase tracking-wide text-stone-700">
+              Your Name
+            </label>
+            <div className="relative">
+              <User className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-stone-400" />
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Enter your full name"
-                className="w-full px-4 py-3 rounded-xl border-2 border-stone-200 focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all"
+                placeholder="Enter your name"
+                className="w-full rounded-xl border border-stone-200 bg-white py-3 pl-10 pr-4 text-sm text-stone-900 outline-none transition focus:border-amber-700 focus:ring-2 focus:ring-amber-700/20"
                 required
               />
             </div>
+          </div>
 
-            {/* PDF Upload (only for print) */}
-            {serviceType === 'print' && (
-              <div>
-                <label className="block text-sm font-semibold text-stone-900 mb-2">
-                  Upload PDF <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <input
-                    type="file"
-                    accept=".pdf,application/pdf"
-                    onChange={handlePdfUpload}
-                    className="w-full px-4 py-3 rounded-xl border-2 border-stone-200 focus:border-amber-500 transition-all file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-amber-100 file:text-amber-900 file:font-semibold hover:file:bg-amber-200 file:cursor-pointer cursor-pointer"
-                  />
-                </div>
-                {pdfFile && (
-                  <div className="mt-2 flex items-center gap-2 text-sm text-green-600">
-                    <span>✓</span>
-                    <span className="font-medium">{pdfFile.name}</span>
-                    <span className="text-stone-500">({(pdfFile.size / 1024 / 1024).toFixed(2)} MB)</span>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Color Type */}
-            <div>
-              <label className="block text-sm font-semibold text-stone-900 mb-2">
-                Color Type
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                {(['bw', 'color'] as const).map((type) => (
-                  <button
-                    key={type}
-                    type="button"
-                    onClick={() => setColorType(type)}
-                    className={`p-3 rounded-xl border-2 transition-all ${
-                      colorType === type
-                        ? 'border-amber-700 bg-amber-50'
-                        : 'border-stone-200 bg-white hover:border-amber-300'
-                    }`}
-                  >
-                    <span className="font-semibold capitalize">
-                      {type === 'bw' ? 'Black & White' : 'Color'}
-                    </span>
-                    <span className="ml-2 text-sm text-stone-600">
-                      (₱{PRICING[serviceType][type]}/page)
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Paper Size */}
-            <div>
-              <label className="block text-sm font-semibold text-stone-900 mb-2">
-                Paper Size
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                {(['a4', 'letter', 'legal'] as const).map((size) => (
-                  <button
-                    key={size}
-                    type="button"
-                    onClick={() => setPaperSize(size)}
-                    className={`p-3 rounded-xl border-2 transition-all ${
-                      paperSize === size
-                        ? 'border-amber-700 bg-amber-50'
-                        : 'border-stone-200 bg-white hover:border-amber-300'
-                    }`}
-                  >
-                    <span className="font-semibold uppercase text-sm">
-                      {size}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Pages & Copies */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-semibold text-stone-900 mb-2">
-                  Number of Pages
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  value={pages}
-                  onChange={(e) => setPages(Math.max(1, parseInt(e.target.value) || 1))}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-stone-200 focus:border-amber-500 focus:ring-2 focus:ring-amber-200"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-stone-900 mb-2">
-                  Number of Copies
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  value={copies}
-                  onChange={(e) => setCopies(Math.max(1, parseInt(e.target.value) || 1))}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-stone-200 focus:border-amber-500 focus:ring-2 focus:ring-amber-200"
-                />
-              </div>
-            </div>
-
-            {/* Sided */}
-            <div>
-              <label className="block text-sm font-semibold text-stone-900 mb-2">
-                Sided
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                {(['single', 'double'] as const).map((type) => (
-                  <button
-                    key={type}
-                    type="button"
-                    onClick={() => setSided(type)}
-                    className={`p-3 rounded-xl border-2 transition-all ${
-                      sided === type
-                        ? 'border-amber-700 bg-amber-50'
-                        : 'border-stone-200 bg-white hover:border-amber-300'
-                    }`}
-                  >
-                    <span className="font-semibold capitalize">
-                      {type === 'single' ? 'Single Sided' : 'Double Sided'}
-                    </span>
-                    {type === 'double' && (
-                      <span className="ml-2 text-sm text-green-600">(25% off)</span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Binding */}
-            <div>
-              <label className="flex items-center gap-3 cursor-pointer p-3 rounded-xl border-2 border-stone-200 hover:bg-stone-50 transition-all">
-                <input
-                  type="checkbox"
-                  checked={binding}
-                  onChange={(e) => setBinding(e.target.checked)}
-                  className="w-5 h-5 rounded border-stone-300 text-amber-700 focus:ring-amber-500"
-                />
-                <span className="font-semibold text-stone-900">
-                  Add Binding (+₱20)
-                </span>
-              </label>
-            </div>
-
-            {/* Special Instructions */}
-            <div>
-              <label className="block text-sm font-semibold text-stone-900 mb-2">
-                Special Instructions (Optional)
-              </label>
-              <textarea
-                value={specialInstructions}
-                onChange={(e) => setSpecialInstructions(e.target.value)}
-                placeholder="Any special instructions..."
-                rows={3}
-                className="w-full px-4 py-3 rounded-xl border-2 border-stone-200 focus:border-amber-500 focus:ring-2 focus:ring-amber-200 resize-none"
+          {/* PDF Upload */}
+          <div>
+            <label className="mb-2 block text-sm font-semibold uppercase tracking-wide text-stone-700">
+              PDF File
+            </label>
+            <div className="relative">
+              <FileText className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-stone-400" />
+              <input
+                type="file"
+                accept=".pdf,application/pdf"
+                onChange={handlePdfUpload}
+                className="w-full rounded-xl border border-stone-200 bg-white py-[9px] pl-10 pr-4 text-sm text-stone-900 outline-none transition file:mr-3 file:rounded-lg file:border-0 file:bg-amber-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-amber-800 hover:file:bg-amber-200 focus:border-amber-700 focus:ring-2 focus:ring-amber-700/20"
+                required
               />
             </div>
-
-            {/* Payment Method */}
-            <div>
-              <label className="block text-sm font-semibold text-stone-900 mb-2">
-                Payment Method
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                {(['gcash', 'cash'] as const).map((method) => (
-                  <button
-                    key={method}
-                    type="button"
-                    onClick={() => setPaymentMethod(method)}
-                    className={`p-3 rounded-xl border-2 transition-all ${
-                      paymentMethod === method
-                        ? 'border-amber-700 bg-amber-50'
-                        : 'border-stone-200 bg-white hover:border-amber-300'
-                    }`}
-                  >
-                    <span className="font-semibold capitalize">
-                      {method === 'gcash' ? 'GCash' : 'Cash on Pickup'}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Payment Proof (GCash only) */}
-            {paymentMethod === 'gcash' && (
-              <div>
-                <label className="block text-sm font-semibold text-stone-900 mb-2">
-                  Upload Payment Proof <span className="text-red-500">*</span>
-                </label>
-                <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-xl">
-                  <p className="text-sm text-amber-900 font-medium">
-                    💳 Send payment to: <strong className="text-amber-700">09XX XXX XXXX</strong>
-                  </p>
-                </div>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handlePaymentProofUpload}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-stone-200 focus:border-amber-500 transition-all file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-amber-100 file:text-amber-900 file:font-semibold hover:file:bg-amber-200 file:cursor-pointer cursor-pointer"
-                />
-                {paymentProof && (
-                  <div className="mt-2 flex items-center gap-2 text-sm text-green-600">
-                    <span>✓</span>
-                    <span className="font-medium">{paymentProof.name}</span>
-                    <span className="text-stone-500">({(paymentProof.size / 1024).toFixed(0)} KB)</span>
-                  </div>
-                )}
+            {pdfFile && (
+              <div className="mt-2 flex items-center gap-2 text-xs text-emerald-700">
+                <CheckCircle className="h-3.5 w-3.5" />
+                <span className="font-medium">{pdfFile.name}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPdfFile(null);
+                    const input = document.querySelector<HTMLInputElement>("input[type=file]");
+                    if (input) input.value = "";
+                  }}
+                  className="ml-auto text-stone-400 hover:text-stone-600"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
               </div>
             )}
+          </div>
 
-            {/* Total & Submit */}
-            <div className="border-t-2 border-stone-200 pt-6">
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-lg font-semibold text-stone-900">Total:</span>
-                <span className="text-3xl font-bold text-amber-900">₱{total.toFixed(2)}</span>
+          {/* Requirements Card */}
+          <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
+            <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-stone-700">
+              Printing Requirements
+            </h2>
+
+            <div className="space-y-4">
+              {/* Color Mode */}
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-medium text-stone-700">Color Mode</span>
+                <div className="flex rounded-xl border border-stone-200 bg-stone-50 p-1">
+                  {(["bw", "color"] as ColorType[]).map((type) => (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => setColorType(type)}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                        colorType === type
+                          ? "bg-amber-700 text-white shadow-sm"
+                          : "text-stone-600 hover:bg-stone-100"
+                      }`}
+                    >
+                      {type === "bw" ? "B&W" : "COLOR"}
+                    </button>
+                  ))}
+                </div>
               </div>
-              
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="w-full bg-gradient-to-r from-amber-700 to-amber-900 text-white py-4 rounded-xl font-bold text-lg hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isSubmitting ? 'Submitting Request...' : 'Submit Request'}
-              </button>
-              
-              <p className="text-center text-sm text-stone-600 mt-4">
-                📍 Pickup at Room 411 • Campus convenience, handled quietly
-              </p>
+
+              {/* Paper Size */}
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-medium text-stone-700">Paper Size</span>
+                <div className="flex rounded-xl border border-stone-200 bg-stone-50 p-1">
+                  {(["a4", "long", "a3"] as PaperSize[]).map((size) => (
+                    <button
+                      key={size}
+                      type="button"
+                      onClick={() => setPaperSize(size)}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-semibold uppercase transition ${
+                        paperSize === size
+                          ? "bg-amber-700 text-white shadow-sm"
+                          : "text-stone-600 hover:bg-stone-100"
+                      }`}
+                    >
+                      {size}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Copies */}
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-medium text-stone-700">Copies</span>
+                <div className="flex items-center gap-2 rounded-xl border border-stone-200 bg-white p-1">
+                  <button
+                    type="button"
+                    onClick={() => adjustCopies(-1)}
+                    className="touch-target flex items-center justify-center rounded-lg bg-stone-100 p-2 text-stone-700 transition hover:bg-stone-200"
+                    aria-label="Decrease copies"
+                  >
+                    <Minus className="h-4 w-4" />
+                  </button>
+                  <span className="w-8 text-center text-sm font-semibold text-stone-900">{copies}</span>
+                  <button
+                    type="button"
+                    onClick={() => adjustCopies(1)}
+                    className="touch-target flex items-center justify-center rounded-lg bg-stone-100 p-2 text-stone-700 transition hover:bg-stone-200"
+                    aria-label="Increase copies"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Sides */}
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-medium text-stone-700">Sides</span>
+                <div className="flex rounded-xl border border-stone-200 bg-stone-50 p-1">
+                  {(["single", "double"] as SidedType[]).map((type) => (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => setSided(type)}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-semibold uppercase transition ${
+                        sided === type
+                          ? "bg-amber-700 text-white shadow-sm"
+                          : "text-stone-600 hover:bg-stone-100"
+                      }`}
+                    >
+                      {type}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      </form>
+
+          {/* Price Breakdown */}
+          <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4">
+            <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-amber-900">
+              Price Breakdown
+            </h2>
+            <div className="space-y-2">
+              {pricing.lineItems.map((item, idx) => (
+                <div key={idx} className="flex items-center justify-between text-sm">
+                  <span className="text-stone-700">{item.label}</span>
+                  <span className="font-medium text-stone-900">{formatPeso(item.amount)}</span>
+                </div>
+              ))}
+              <div className="my-2 h-px bg-amber-200" />
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold uppercase tracking-wide text-amber-900">
+                  {colorType === "color" ? "Estimated Price" : "Total Price"}
+                </span>
+                <span className="text-xl font-bold text-amber-800">
+                  {colorType === "color" ? `Starts at ${formatPeso(pricing.total)}` : formatPeso(pricing.total)}
+                </span>
+              </div>
+              {colorType === "color" && (
+                <p className="mt-1 text-xs text-amber-700">
+                  Final color price may vary depending on content.
+                </p>
+              )}
+            </div>
+          </div>
+
+          {error && (
+            <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-700">
+              {error}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="fixed bottom-4 left-4 right-4 mx-auto flex max-w-sm items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-700 to-amber-900 py-4 text-base font-bold text-white shadow-lg transition active:scale-[0.98] disabled:opacity-60 sm:static sm:w-full"
+          >
+            <Send className="h-5 w-5" />
+            {isSubmitting ? "Submitting..." : "SUBMIT PRINT REQUEST"}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

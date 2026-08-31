@@ -1,5 +1,7 @@
-import PrintingServiceClient from "@/components/printing/PrintingServiceClient";
+import { redirect } from "next/navigation";
 
-export default function Page() {
-  return <PrintingServiceClient />;
+export const dynamic = "force-dynamic";
+
+export default function PrintingServiceRedirectPage() {
+  redirect("/services/print");
 }

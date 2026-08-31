@@ -59,6 +59,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
 
   const servicesNav = useMemo(
     () => [
+      { href: "/admin/qr-services", label: "QR Services", icon: "📱" },
       { href: "/admin/printing", label: "Printing", icon: "🖨️" },
       { href: "/admin/gcash", label: "GCash", icon: "💳" },
       { href: "/admin/deliveries", label: "Delivery", icon: "🚚" },

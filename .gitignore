@@ -41,3 +41,7 @@ AUDIT_REPORT.md
 
 # Archives
 *.zip
+
+# QA screenshots
+qa-screenshots/
+qa-screenshots.mjs

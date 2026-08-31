@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { CreditCard, Eye, X, Search, TrendingUp, DollarSign, Clock } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { CreditCard, Eye, X, Search, TrendingUp, DollarSign, Clock, Settings, Plus, Trash2, Save, Upload, Download, Copy, Check, QrCode, ExternalLink } from 'lucide-react';
 import { supabaseBrowser } from '@/lib/supabase/browser';
+import { parseFeeRules, calculateGCashFee, formatPeso, type GCashFeeRule } from '@/lib/gcash/fees';
 
 type GCashRequest = {
   id: string;
@@ -16,6 +17,7 @@ type GCashRequest = {
   payment_proof_url: string;
   status: 'pending' | 'processing' | 'completed' | 'cancelled';
   admin_notes?: string;
+  reference_notes?: string;
 };
 
 type Stats = {
@@ -43,6 +45,16 @@ export default function GCashAdminClient() {
   const [searchQuery, setSearchQuery] = useState('');
   const [adminNotes, setAdminNotes] = useState('');
   const [loading, setLoading] = useState(true);
+  const [showSettings, setShowSettings] = useState(false);
+  const [feeRules, setFeeRules] = useState<GCashFeeRule[]>([]);
+  const [accountName, setAccountName] = useState('');
+  const [accountNumber, setAccountNumber] = useState('');
+  const [qrUrl, setQrUrl] = useState('');
+  const [qrFile, setQrFile] = useState<File | null>(null);
+  const [qrPreview, setQrPreview] = useState('');
+  const [settingsLoading, setSettingsLoading] = useState(false);
+  const [settingsSaved, setSettingsSaved] = useState(false);
+  const qrInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch requests
   const fetchRequests = async () => {
@@ -83,6 +95,26 @@ export default function GCashAdminClient() {
 
     setStats(stats);
   };
+
+  // Load settings
+  useEffect(() => {
+    fetchRequests();
+    const load = async () => {
+      const supabase = supabaseBrowser();
+      const { data } = await supabase.from('app_settings').select('key, value').in('key', [
+        'gcash_fee_rules',
+        'gcash_account_name',
+        'gcash_account_number',
+        'gcash_qr_url',
+      ]);
+      const map = new Map(data?.map((row: any) => [row.key, row.value]) || []);
+      setFeeRules(parseFeeRules(map.get('gcash_fee_rules')));
+      setAccountName(String(map.get('gcash_account_name') ?? ''));
+      setAccountNumber(String(map.get('gcash_account_number') ?? ''));
+      setQrUrl(String(map.get('gcash_qr_url') ?? ''));
+    };
+    load();
+  }, []);
 
   // Filter requests
   useEffect(() => {
@@ -128,8 +160,23 @@ export default function GCashAdminClient() {
     }
   };
 
+  const fetchSettings = async () => {
+    const supabase = supabaseBrowser();
+    const { data, error } = await supabase
+      .from('app_settings')
+      .select('key, value')
+      .in('key', ['gcash_fee_rules', 'gcash_account_name', 'gcash_account_number']);
+    if (error) return;
+    const map = new Map<string, unknown>();
+    for (const row of data ?? []) map.set(row.key, row.value);
+    setFeeRules(parseFeeRules(map.get('gcash_fee_rules')));
+    setAccountName(String(map.get('gcash_account_name') ?? ''));
+    setAccountNumber(String(map.get('gcash_account_number') ?? ''));
+  };
+
   useEffect(() => {
     fetchRequests();
+    fetchSettings();
 
     // Subscribe to realtime changes
     const supabase = supabaseBrowser();
@@ -219,6 +266,280 @@ export default function GCashAdminClient() {
           </div>
         </div>
 
+        {/* Settings */}
+        <div className="bg-white rounded-xl border-2 border-stone-200 shadow-lg overflow-hidden">
+          <button
+            onClick={() => setShowSettings((s) => !s)}
+            className="flex w-full items-center justify-between p-4 text-left hover:bg-stone-50"
+          >
+            <div className="flex items-center gap-2">
+              <Settings className="h-5 w-5 text-stone-600" />
+              <span className="font-semibold text-stone-900">Owner GCash Account & Fee Settings</span>
+            </div>
+            <span className="text-sm text-stone-500">{showSettings ? 'Hide' : 'Show'}</span>
+          </button>
+          {showSettings && (
+            <div className="border-t-2 border-stone-200 p-4 sm:p-6 space-y-6">
+              {settingsSaved && (
+                <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-xs font-semibold text-emerald-800 flex items-center gap-2">
+                  <Check className="h-4 w-4 text-emerald-600" />
+                  GCash settings saved and updated system-wide!
+                </div>
+              )}
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1">
+                    Owner Account Name
+                  </label>
+                  <input
+                    type="text"
+                    value={accountName}
+                    onChange={(e) => setAccountName(e.target.value)}
+                    placeholder="e.g. TENPESORUN DORM STORE"
+                    className="w-full rounded-xl border-2 border-stone-200 px-3.5 py-2.5 text-sm focus:border-amber-700 focus:outline-none font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1">
+                    Owner GCash Mobile Number
+                  </label>
+                  <input
+                    type="text"
+                    value={accountNumber}
+                    onChange={(e) => setAccountNumber(e.target.value)}
+                    placeholder="09XXXXXXXXX"
+                    maxLength={11}
+                    className="w-full rounded-xl border-2 border-stone-200 px-3.5 py-2.5 text-sm font-mono font-bold tracking-wider focus:border-amber-700 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Owner GCash QR Section */}
+              <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4">
+                <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-2">
+                  Owner GCash Receiving QR
+                </label>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                  {qrPreview || qrUrl ? (
+                    <div className="relative">
+                      <img
+                        src={qrPreview || qrUrl}
+                        alt="Owner GCash QR"
+                        className="h-28 w-28 rounded-xl border-2 border-stone-200 bg-white p-1 object-contain shadow-sm"
+                      />
+                    </div>
+                  ) : (
+                    <div className="h-28 w-28 rounded-xl border-2 border-dashed border-stone-300 bg-stone-100 flex flex-col items-center justify-center text-stone-400">
+                      <QrCode className="h-8 w-8 mb-1" />
+                      <span className="text-[10px] font-semibold">No QR Uploaded</span>
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <input
+                      type="file"
+                      ref={qrInputRef}
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        setQrFile(file);
+                        setQrPreview(URL.createObjectURL(file));
+                      }}
+                      className="hidden"
+                    />
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => qrInputRef.current?.click()}
+                        className="flex items-center gap-1.5 rounded-xl bg-amber-800 px-3.5 py-2 text-xs font-bold text-white hover:bg-amber-900 transition"
+                      >
+                        <Upload className="h-3.5 w-3.5" /> {qrUrl || qrPreview ? 'Replace QR' : 'Upload QR'}
+                      </button>
+                      {(qrUrl || qrPreview) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setQrFile(null);
+                            setQrPreview('');
+                            setQrUrl('');
+                          }}
+                          className="flex items-center gap-1 rounded-xl bg-stone-200 px-3 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-300 transition"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" /> Remove
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-stone-500">
+                      This QR will be displayed to customers when performing Cash Out.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Fee Rules */}
+              <div>
+                <div className="mb-2 flex items-center justify-between">
+                  <label className="text-xs font-bold uppercase tracking-wider text-stone-700">Fee Rules Schedule</label>
+                  <button
+                    onClick={() =>
+                      setFeeRules((prev) => [
+                        ...prev,
+                        { min_amount: 0, max_amount: null, flat_fee: 0, percentage: 2, min_fee: 0, max_fee: 0 },
+                      ])
+                    }
+                    className="flex items-center gap-1 rounded-lg bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-800 hover:bg-amber-200"
+                  >
+                    <Plus className="h-3 w-3" /> Add Rule
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {feeRules.map((rule, idx) => (
+                    <div key={idx} className="grid gap-2 rounded-xl bg-stone-50 p-3 sm:grid-cols-6 items-center">
+                      <div>
+                        <span className="text-[10px] text-stone-400 block sm:hidden">Min Amount</span>
+                        <input
+                          type="number"
+                          placeholder="Min"
+                          value={rule.min_amount}
+                          onChange={(e) =>
+                            setFeeRules((prev) =>
+                              prev.map((r, i) => (i === idx ? { ...r, min_amount: Number(e.target.value) } : r))
+                            )
+                          }
+                          className="w-full rounded-lg border border-stone-200 px-2 py-1.5 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-stone-400 block sm:hidden">Max Amount</span>
+                        <input
+                          type="number"
+                          placeholder="Max"
+                          value={rule.max_amount ?? ''}
+                          onChange={(e) =>
+                            setFeeRules((prev) =>
+                              prev.map((r, i) =>
+                                i === idx
+                                  ? { ...r, max_amount: e.target.value === '' ? null : Number(e.target.value) }
+                                  : r
+                              )
+                            )
+                          }
+                          className="w-full rounded-lg border border-stone-200 px-2 py-1.5 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-stone-400 block sm:hidden">Flat Fee</span>
+                        <input
+                          type="number"
+                          placeholder="Flat"
+                          value={rule.flat_fee}
+                          onChange={(e) =>
+                            setFeeRules((prev) =>
+                              prev.map((r, i) => (i === idx ? { ...r, flat_fee: Number(e.target.value) } : r))
+                            )
+                          }
+                          className="w-full rounded-lg border border-stone-200 px-2 py-1.5 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-stone-400 block sm:hidden">Percentage (%)</span>
+                        <input
+                          type="number"
+                          placeholder="%"
+                          value={rule.percentage}
+                          onChange={(e) =>
+                            setFeeRules((prev) =>
+                              prev.map((r, i) => (i === idx ? { ...r, percentage: Number(e.target.value) } : r))
+                            )
+                          }
+                          className="w-full rounded-lg border border-stone-200 px-2 py-1.5 text-sm font-bold text-amber-800"
+                        />
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-stone-400 block sm:hidden">Min Fee</span>
+                        <input
+                          type="number"
+                          placeholder="Min fee"
+                          value={rule.min_fee}
+                          onChange={(e) =>
+                            setFeeRules((prev) =>
+                              prev.map((r, i) => (i === idx ? { ...r, min_fee: Number(e.target.value) } : r))
+                            )
+                          }
+                          className="w-full rounded-lg border border-stone-200 px-2 py-1.5 text-sm"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          placeholder="Max fee"
+                          value={rule.max_fee}
+                          onChange={(e) =>
+                            setFeeRules((prev) =>
+                              prev.map((r, i) => (i === idx ? { ...r, max_fee: Number(e.target.value) } : r))
+                            )
+                          }
+                          className="flex-1 rounded-lg border border-stone-200 px-2 py-1.5 text-sm"
+                        />
+                        <button
+                          onClick={() => setFeeRules((prev) => prev.filter((_, i) => i !== idx))}
+                          className="rounded-lg bg-red-100 p-1.5 text-red-700 hover:bg-red-200"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-2 text-xs text-stone-500">
+                  Preview: ₱500 → fee {formatPeso(calculateGCashFee(feeRules, 500).serviceFee)}, ₱1,000 → fee{' '}
+                  {formatPeso(calculateGCashFee(feeRules, 1000).serviceFee)}
+                </div>
+              </div>
+
+              <button
+                onClick={async () => {
+                  setSettingsLoading(true);
+                  setSettingsSaved(false);
+                  try {
+                    let finalQrUrl = qrUrl;
+                    if (qrFile) {
+                      const formData = new FormData();
+                      formData.append('qrFile', qrFile);
+                      const { uploadOwnerGCashQR } = await import('@/app/services/gcash/actions');
+                      const uploadRes = await uploadOwnerGCashQR(formData);
+                      if (uploadRes.success && uploadRes.data?.url) {
+                        finalQrUrl = uploadRes.data.url;
+                        setQrUrl(finalQrUrl);
+                      }
+                    }
+
+                    const { saveOwnerGCashSettings } = await import('@/app/services/gcash/actions');
+                    const res = await saveOwnerGCashSettings(accountName, accountNumber, finalQrUrl, feeRules);
+                    if (res.success) {
+                      setSettingsSaved(true);
+                      setTimeout(() => setSettingsSaved(false), 4000);
+                    } else {
+                      alert(res.error || 'Failed to save settings');
+                    }
+                  } catch (err) {
+                    console.error('Settings save error:', err);
+                    alert('Failed to save settings');
+                  } finally {
+                    setSettingsLoading(false);
+                  }
+                }}
+                disabled={settingsLoading}
+                className="flex items-center gap-2 rounded-xl bg-amber-800 px-5 py-2.5 text-sm font-bold text-white hover:bg-amber-900 disabled:opacity-60 transition"
+              >
+                <Save className="h-4 w-4" /> {settingsLoading ? 'Saving...' : 'Save Settings'}
+              </button>
+            </div>
+          )}
+        </div>
+
         {/* Filters */}
         <div className="bg-white rounded-xl p-4 border-2 border-stone-200 shadow-lg">
           <div className="flex flex-col sm:flex-row gap-3">
@@ -254,20 +575,20 @@ export default function GCashAdminClient() {
         {/* Requests Table */}
         <div className="bg-white rounded-xl border-2 border-stone-200 shadow-lg overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-stone-100 border-b-2 border-stone-200">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-stone-700 uppercase">Time</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-stone-700 uppercase">Student</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-stone-700 uppercase">Transaction</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-stone-700 uppercase">Amount</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-stone-700 uppercase">Fee</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-stone-700 uppercase">Total</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-stone-700 uppercase">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-stone-700 uppercase">Actions</th>
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-stone-100 border-b-2 border-stone-200 text-stone-700 text-xs font-semibold uppercase">
+                  <th className="px-4 py-3">Time</th>
+                  <th className="px-4 py-3">Customer</th>
+                  <th className="px-4 py-3">Type</th>
+                  <th className="px-4 py-3">Amount</th>
+                  <th className="px-4 py-3">Fee</th>
+                  <th className="px-4 py-3">Total</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-stone-200">
+              <tbody className="divide-y divide-stone-200 text-sm">
                 {filteredRequests.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="px-4 py-8 text-center text-stone-500">
@@ -276,31 +597,22 @@ export default function GCashAdminClient() {
                   </tr>
                 ) : (
                   filteredRequests.map(request => (
-                    <tr key={request.id} className="hover:bg-stone-50">
-                      <td className="px-4 py-3 text-sm text-stone-600">
-                        {new Date(request.created_at).toLocaleTimeString('en-US', {
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
+                    <tr key={request.id} className="hover:bg-stone-50 transition-colors">
+                      <td className="px-4 py-3 text-stone-600 text-xs">
+                        {new Date(request.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </td>
                       <td className="px-4 py-3">
-                        <p className="font-medium text-stone-900">{request.student_name}</p>
-                        <p className="text-xs text-stone-500">{request.student_contact}</p>
+                        <p className="font-semibold text-stone-900">{request.student_name}</p>
+                        <p className="text-stone-500 text-xs">{request.student_contact}</p>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xl">{getTransactionIcon(request.transaction_type)}</span>
-                          <span className="text-sm font-medium text-stone-700 capitalize">
-                            {request.transaction_type.replace('_', ' ')}
-                          </span>
-                        </div>
+                        <span className="inline-flex items-center gap-1 font-medium text-xs">
+                          {getTransactionIcon(request.transaction_type)}
+                          {request.transaction_type === 'cash_in' ? 'Cash In' : 'Cash Out'}
+                        </span>
                       </td>
-                      <td className="px-4 py-3">
-                        <p className="font-medium text-stone-900">₱{Number(request.amount).toFixed(2)}</p>
-                      </td>
-                      <td className="px-4 py-3">
-                        <p className="text-sm text-stone-600">₱{Number(request.service_fee).toFixed(2)}</p>
-                      </td>
+                      <td className="px-4 py-3 font-medium">₱{Number(request.amount).toFixed(2)}</td>
+                      <td className="px-4 py-3 text-stone-600">₱{Number(request.service_fee).toFixed(2)}</td>
                       <td className="px-4 py-3">
                         <p className="font-bold text-amber-700">₱{Number(request.total_amount).toFixed(2)}</p>
                       </td>
@@ -332,10 +644,13 @@ export default function GCashAdminClient() {
       {/* View Details Modal */}
       {selectedRequest && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
             <div className="sticky top-0 bg-gradient-to-br from-amber-700 to-amber-900 p-6 rounded-t-2xl">
               <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-bold text-white">Request Details</h2>
+                <div>
+                  <h2 className="text-xl font-bold text-white">GCash Transaction Details</h2>
+                  <p className="text-white/80 text-xs mt-0.5">ID: {selectedRequest.id}</p>
+                </div>
                 <button
                   onClick={() => {
                     setSelectedRequest(null);
@@ -349,93 +664,175 @@ export default function GCashAdminClient() {
             </div>
 
             <div className="p-6 space-y-6">
-              {/* Student Info */}
+              {/* Customer Info */}
               <div>
-                <h3 className="text-sm font-semibold text-stone-500 uppercase mb-3">Student Information</h3>
-                <div className="bg-stone-50 rounded-xl p-4 space-y-2">
-                  <p><span className="font-semibold">Name:</span> {selectedRequest.student_name}</p>
-                  <p><span className="font-semibold">Contact:</span> {selectedRequest.student_contact}</p>
-                  <p><span className="font-semibold">Request ID:</span> {selectedRequest.id}</p>
-                  <p><span className="font-semibold">Time:</span> {new Date(selectedRequest.created_at).toLocaleString()}</p>
+                <h3 className="text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">Customer Information</h3>
+                <div className="bg-stone-50 rounded-xl p-4 space-y-1.5 text-sm">
+                  <p><span className="font-semibold text-stone-700">Name:</span> {selectedRequest.student_name}</p>
+                  <p><span className="font-semibold text-stone-700">Contact:</span> {selectedRequest.student_contact}</p>
+                  <p><span className="font-semibold text-stone-700">Time:</span> {new Date(selectedRequest.created_at).toLocaleString()}</p>
                 </div>
               </div>
 
               {/* Transaction Details */}
               <div>
-                <h3 className="text-sm font-semibold text-stone-500 uppercase mb-3">Transaction Details</h3>
-                <div className="bg-stone-50 rounded-xl p-4 space-y-2">
-                  <p>
-                    <span className="font-semibold">Type:</span>{' '}
-                    {getTransactionIcon(selectedRequest.transaction_type)}{' '}
-                    {selectedRequest.transaction_type.replace('_', ' ').toUpperCase()}
-                  </p>
-                  <p><span className="font-semibold">Amount:</span> ₱{Number(selectedRequest.amount).toFixed(2)}</p>
-                  <p><span className="font-semibold">Service Fee:</span> ₱{Number(selectedRequest.service_fee).toFixed(2)}</p>
-                  <p className="text-2xl font-bold text-amber-700 pt-2">
-                    Total: ₱{Number(selectedRequest.total_amount).toFixed(2)}
-                  </p>
+                <h3 className="text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">Transaction Details</h3>
+                <div className="bg-stone-50 rounded-xl p-4 space-y-2 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-stone-700">Type:</span>
+                    <span className="font-bold text-amber-900">
+                      {selectedRequest.transaction_type === 'cash_in' ? '💵 Cash In' : '💸 Cash Out'}
+                    </span>
+                  </div>
+
+                  {selectedRequest.transaction_type === 'cash_in' ? (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <span className="text-stone-600">GCash to Send to Customer:</span>
+                        <span className="font-bold text-stone-900">₱{Number(selectedRequest.amount).toFixed(2)}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-stone-600">Service Fee:</span>
+                        <span className="font-semibold text-amber-800">+₱{Number(selectedRequest.service_fee).toFixed(2)}</span>
+                      </div>
+                      <div className="flex items-center justify-between pt-2 border-t border-stone-200">
+                        <span className="font-bold text-stone-900">Physical Cash Customer Pays:</span>
+                        <span className="text-xl font-bold text-amber-800">₱{Number(selectedRequest.total_amount).toFixed(2)}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <span className="text-stone-600">Physical Cash Customer Receives:</span>
+                        <span className="font-bold text-stone-900">₱{Number(selectedRequest.amount).toFixed(2)}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-stone-600">Service Fee:</span>
+                        <span className="font-semibold text-amber-800">+₱{Number(selectedRequest.service_fee).toFixed(2)}</span>
+                      </div>
+                      <div className="flex items-center justify-between pt-2 border-t border-stone-200">
+                        <span className="font-bold text-stone-900">GCash Customer Sent to Owner:</span>
+                        <span className="text-xl font-bold text-amber-800">₱{Number(selectedRequest.total_amount).toFixed(2)}</span>
+                      </div>
+                    </>
+                  )}
+
+                  {selectedRequest.reference_notes && (
+                    <div className="pt-2 text-xs text-stone-600 border-t border-stone-200">
+                      <span className="font-semibold">Reference Notes:</span> {selectedRequest.reference_notes}
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* Payment Proof - only for cash_out */}
-              {selectedRequest.transaction_type === 'cash_out' && selectedRequest.payment_proof_url && (
+              {/* Recipient / Proof Display */}
+              {selectedRequest.transaction_type === 'cash_in' ? (
                 <div>
-                  <h3 className="text-sm font-semibold text-stone-500 uppercase mb-3">Payment Proof</h3>
-                  <a
-                    href={selectedRequest.payment_proof_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block"
-                  >
-                    <img
-                      src={selectedRequest.payment_proof_url}
-                      alt="Payment proof"
-                      className="w-full rounded-xl border-2 border-stone-200 hover:border-amber-700 transition-colors"
-                    />
-                  </a>
+                  <h3 className="text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">
+                    Customer Recipient Destination
+                  </h3>
+                  {selectedRequest.payment_proof_url ? (
+                    <div className="bg-stone-50 rounded-xl p-4 text-center">
+                      <p className="text-xs font-semibold text-stone-700 mb-2">Customer Uploaded GCash QR</p>
+                      <a
+                        href={selectedRequest.payment_proof_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-block"
+                      >
+                        <img
+                          src={selectedRequest.payment_proof_url}
+                          alt="Customer GCash QR"
+                          className="h-48 w-48 mx-auto rounded-xl border-2 border-stone-200 p-1 bg-white object-contain hover:border-amber-700 transition"
+                        />
+                      </a>
+                      <a
+                        href={selectedRequest.payment_proof_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-amber-800 hover:text-amber-900"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" /> Open Full Image
+                      </a>
+                    </div>
+                  ) : (
+                    <div className="bg-amber-50 rounded-xl p-4 flex items-center justify-between">
+                      <div>
+                        <span className="text-xs text-amber-800 block">Send GCash to Number:</span>
+                        <span className="text-base font-mono font-bold text-amber-950">
+                          {selectedRequest.student_contact}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => navigator.clipboard.writeText(selectedRequest.student_contact)}
+                        className="flex items-center gap-1 rounded-lg bg-amber-200 px-3 py-1.5 text-xs font-bold text-amber-900 hover:bg-amber-300 transition"
+                      >
+                        <Copy className="h-3.5 w-3.5" /> Copy
+                      </button>
+                    </div>
+                  )}
                 </div>
-              )}
-              {selectedRequest.transaction_type === 'cash_out' && !selectedRequest.payment_proof_url && (
+              ) : (
                 <div>
-                  <h3 className="text-sm font-semibold text-stone-500 uppercase mb-3">Payment Proof</h3>
-                  <div className="bg-yellow-50 rounded-xl p-4 text-yellow-800 text-sm">
-                    No payment proof uploaded
-                  </div>
-                </div>
-              )}
-              {selectedRequest.transaction_type === 'cash_in' && (
-                <div>
-                  <h3 className="text-sm font-semibold text-stone-500 uppercase mb-3">Payment</h3>
-                  <div className="bg-blue-50 rounded-xl p-4 text-blue-800 text-sm">
-                    💵 Cash-in: Customer brings cash to Room 411
-                  </div>
+                  <h3 className="text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">
+                    Cash Out Proof / Reference
+                  </h3>
+                  {selectedRequest.payment_proof_url ? (
+                    <div className="bg-stone-50 rounded-xl p-4 text-center">
+                      <a
+                        href={selectedRequest.payment_proof_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-block"
+                      >
+                        <img
+                          src={selectedRequest.payment_proof_url}
+                          alt="Payment proof"
+                          className="max-h-60 mx-auto rounded-xl border-2 border-stone-200 object-contain hover:border-amber-700 transition"
+                        />
+                      </a>
+                      <a
+                        href={selectedRequest.payment_proof_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-amber-800 hover:text-amber-900"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" /> Open Full Proof Screenshot
+                      </a>
+                    </div>
+                  ) : (
+                    <div className="bg-stone-50 rounded-xl p-3 text-xs text-stone-600">
+                      No screenshot uploaded. Reference: {selectedRequest.reference_notes || 'N/A'}
+                    </div>
+                  )}
                 </div>
               )}
 
               {/* Admin Notes */}
               <div>
-                <h3 className="text-sm font-semibold text-stone-500 uppercase mb-3">Admin Notes</h3>
+                <h3 className="text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">Admin Notes</h3>
                 <textarea
                   value={adminNotes}
                   onChange={(e) => setAdminNotes(e.target.value)}
                   placeholder="Add notes about this request..."
-                  rows={3}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-stone-200 focus:border-amber-700 focus:outline-none resize-none"
+                  rows={2}
+                  className="w-full px-3.5 py-2.5 rounded-xl border-2 border-stone-200 focus:border-amber-700 focus:outline-none resize-none text-sm"
                 />
               </div>
 
               {/* Status Update */}
               <div>
-                <h3 className="text-sm font-semibold text-stone-500 uppercase mb-3">Update Status</h3>
+                <h3 className="text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">Update Status</h3>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {['pending', 'processing', 'completed', 'cancelled'].map(status => (
                     <button
                       key={status}
                       onClick={() => updateStatus(selectedRequest.id, status, adminNotes)}
                       disabled={selectedRequest.status === status}
-                      className={`px-4 py-3 rounded-xl font-medium text-sm transition-all ${
+                      className={`px-3 py-2.5 rounded-xl font-bold text-xs transition-all ${
                         selectedRequest.status === status
-                          ? 'bg-amber-700 text-white cursor-not-allowed'
+                          ? 'bg-amber-800 text-white cursor-not-allowed'
                           : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
                       }`}
                     >
