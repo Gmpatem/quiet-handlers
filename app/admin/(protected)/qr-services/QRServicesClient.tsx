@@ -53,6 +53,7 @@ export default function QRServicesClient({
   const [qrPreview, setQrPreview] = useState<string>("");
   const [gcashLoading, setGcashLoading] = useState(false);
   const [gcashSaved, setGcashSaved] = useState(false);
+  const [copiedPaymentNumber, setCopiedPaymentNumber] = useState(false);
 
   const qrInputRef = useRef<HTMLInputElement>(null);
 
@@ -78,6 +79,22 @@ export default function QRServicesClient({
     a.href = url;
     a.download = `qr-${key}.png`;
     a.click();
+  };
+
+  const downloadPaymentQr = () => {
+    if (!qrUrl) return;
+    const a = document.createElement("a");
+    a.href = qrUrl;
+    a.download = "gcash-payment-qr.png";
+    a.target = "_blank";
+    a.click();
+  };
+
+  const copyPaymentNumber = (num: string) => {
+    if (!num) return;
+    navigator.clipboard.writeText(num);
+    setCopiedPaymentNumber(true);
+    setTimeout(() => setCopiedPaymentNumber(false), 2000);
   };
 
   const handleQrFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -207,38 +224,94 @@ export default function QRServicesClient({
             </p>
           </div>
 
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+            {/* 1-4: Navigation / Website Service QRs */}
             {QR_SERVICES.map((service) => (
               <div
                 key={service.key}
-                className="rounded-2xl border border-stone-200 bg-white p-5 text-center shadow-sm"
+                className="rounded-2xl border border-stone-200 bg-white p-5 text-center shadow-sm flex flex-col justify-between"
               >
-                <div className="mb-3 text-2xl">{service.icon}</div>
-                <h3 className="font-bold text-stone-900">{service.title}</h3>
-                <p className="mb-3 text-xs text-stone-500">{service.instruction}</p>
-                {qrUrls[service.key] ? (
-                  <img
-                    src={qrUrls[service.key]}
-                    alt={`${service.title} QR`}
-                    className="mx-auto mb-3 h-40 w-40 rounded-xl"
-                  />
-                ) : (
-                  <div className="mx-auto mb-3 flex h-40 w-40 items-center justify-center rounded-xl bg-stone-100 text-sm text-stone-500">
-                    No QR
-                  </div>
-                )}
-                <p className="mb-3 truncate text-xs text-stone-400">
-                  {siteUrl}
-                  {service.path}
-                </p>
+                <div>
+                  <div className="mb-3 text-2xl">{service.icon}</div>
+                  <h3 className="font-bold text-stone-900">{service.title}</h3>
+                  <p className="mb-3 text-xs text-stone-500">{service.instruction}</p>
+                  {qrUrls[service.key] ? (
+                    <img
+                      src={qrUrls[service.key]}
+                      alt={`${service.title} QR`}
+                      className="mx-auto mb-3 h-40 w-40 rounded-xl"
+                    />
+                  ) : (
+                    <div className="mx-auto mb-3 flex h-40 w-40 items-center justify-center rounded-xl bg-stone-100 text-sm text-stone-500">
+                      No QR
+                    </div>
+                  )}
+                  <p className="mb-3 truncate text-xs text-stone-400">
+                    {siteUrl}
+                    {service.path}
+                  </p>
+                </div>
                 <button
                   onClick={() => downloadQr(service.key)}
-                  className="mx-auto flex items-center gap-1 rounded-lg bg-stone-100 px-3 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-200 transition"
+                  className="mx-auto flex items-center justify-center gap-1 w-full rounded-lg bg-stone-100 px-3 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-200 transition"
                 >
                   <Download className="h-3.5 w-3.5" /> Download
                 </button>
               </div>
             ))}
+
+            {/* 5: Actual Centralized Owner GCash Receiving QR */}
+            <div className="rounded-2xl border-2 border-amber-300 bg-amber-50/20 p-5 text-center shadow-sm flex flex-col justify-between">
+              <div>
+                <div className="mb-3 text-2xl">💳</div>
+                <h3 className="font-bold text-stone-900">GCASH PAYMENT</h3>
+                <p className="mb-3 text-xs text-amber-900 font-medium">Scan with GCash to pay</p>
+                {qrUrl ? (
+                  <img
+                    src={qrUrl}
+                    alt="GCash Payment QR"
+                    className="mx-auto mb-3 h-40 w-40 rounded-xl object-contain border border-amber-200 bg-white"
+                  />
+                ) : (
+                  <div className="mx-auto mb-3 flex h-40 w-40 flex-col items-center justify-center rounded-xl bg-white border border-stone-200 p-3 text-center text-xs text-stone-500">
+                    <span className="font-semibold text-stone-700">No receiving QR configured.</span>
+                    <span className="mt-1 text-[11px] text-amber-800">Configure it in Settings.</span>
+                  </div>
+                )}
+                {accountName && (
+                  <p className="truncate text-xs font-bold text-stone-800">{accountName}</p>
+                )}
+                {accountNumber && (
+                  <p className="mb-2 text-xs font-mono font-bold text-stone-700">{accountNumber}</p>
+                )}
+              </div>
+              <div className="flex flex-col gap-1.5 mt-2">
+                {qrUrl && (
+                  <button
+                    onClick={downloadPaymentQr}
+                    className="mx-auto flex items-center justify-center gap-1 w-full rounded-lg bg-amber-800 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-900 transition shadow-xs"
+                  >
+                    <Download className="h-3.5 w-3.5" /> Download QR
+                  </button>
+                )}
+                {accountNumber && (
+                  <button
+                    onClick={() => copyPaymentNumber(accountNumber)}
+                    className="mx-auto flex items-center justify-center gap-1 w-full rounded-lg bg-stone-100 px-3 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-200 transition"
+                  >
+                    {copiedPaymentNumber ? (
+                      <>
+                        <Check className="h-3.5 w-3.5 text-emerald-600" /> Copied Number
+                      </>
+                    ) : (
+                      <>
+                        <CreditCard className="h-3.5 w-3.5" /> Copy Number
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="flex justify-center">

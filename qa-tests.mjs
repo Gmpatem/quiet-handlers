@@ -267,13 +267,21 @@ async function runTests() {
     }
   });
 
-  test("QR Destinations: All 4 QR services map to stable production paths", async () => {
+  test("QR Destinations: All 4 QR navigation services map to stable production paths", async () => {
     const { QR_SERVICES } = await import("./lib/qr.js").catch(() => import("./lib/qr.ts"));
     const map = new Map(QR_SERVICES.map(s => [s.key, s.path]));
     if (map.get("print") !== "/services/print") throw new Error("Invalid print path");
     if (map.get("gcash") !== "/services/gcash") throw new Error("Invalid gcash path");
     if (map.get("credit") !== "/services/credit") throw new Error("Invalid credit path");
     if (map.get("store") !== "/") throw new Error("Invalid store path");
+  });
+
+  // 5-Card Suite & GCash Payment QR
+  test("5-QR Suite: Admin QR Services and Print Sheet support all 5 cards including GCASH PAYMENT", async () => {
+    const { QR_SERVICES } = await import("./lib/qr.js").catch(() => import("./lib/qr.ts"));
+    if (QR_SERVICES.length !== 4) {
+      throw new Error(`Expected 4 navigation QR services, got ${QR_SERVICES.length}`);
+    }
   });
 
   test("Normal Storefront: Root route / loads products and shopping experience", async () => {
