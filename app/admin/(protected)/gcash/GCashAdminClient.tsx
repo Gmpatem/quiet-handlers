@@ -45,6 +45,7 @@ export default function GCashAdminClient() {
   const [searchQuery, setSearchQuery] = useState('');
   const [adminNotes, setAdminNotes] = useState('');
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'transactions' | 'settings'>('transactions');
   const [showSettings, setShowSettings] = useState(false);
   const [feeRules, setFeeRules] = useState<GCashFeeRule[]>([]);
   const [accountName, setAccountName] = useState('');
@@ -96,24 +97,44 @@ export default function GCashAdminClient() {
     setStats(stats);
   };
 
-  // Load settings
-  useEffect(() => {
-    fetchRequests();
-    const load = async () => {
-      const supabase = supabaseBrowser();
-      const { data } = await supabase.from('app_settings').select('key, value').in('key', [
+  const fetchSettings = async () => {
+    const supabase = supabaseBrowser();
+    const { data, error } = await supabase
+      .from('app_settings')
+      .select('key, value')
+      .in('key', [
         'gcash_fee_rules',
         'gcash_account_name',
         'gcash_account_number',
         'gcash_qr_url',
       ]);
-      const map = new Map(data?.map((row: any) => [row.key, row.value]) || []);
-      setFeeRules(parseFeeRules(map.get('gcash_fee_rules')));
-      setAccountName(String(map.get('gcash_account_name') ?? ''));
-      setAccountNumber(String(map.get('gcash_account_number') ?? ''));
-      setQrUrl(String(map.get('gcash_qr_url') ?? ''));
+    if (error) return;
+    const map = new Map<string, unknown>();
+    for (const row of data ?? []) map.set(row.key, row.value);
+    setFeeRules(parseFeeRules(map.get('gcash_fee_rules')));
+    setAccountName(String(map.get('gcash_account_name') ?? ''));
+    setAccountNumber(String(map.get('gcash_account_number') ?? ''));
+    setQrUrl(String(map.get('gcash_qr_url') ?? ''));
+  };
+
+  // Realtime subscription & initial load
+  useEffect(() => {
+    fetchRequests();
+    fetchSettings();
+
+    // Subscribe to realtime changes
+    const supabase = supabaseBrowser();
+    const channel = supabase
+      .channel('gcash-changes')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'gcash_requests' },
+        () => fetchRequests()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
     };
-    load();
   }, []);
 
   // Filter requests
@@ -160,39 +181,6 @@ export default function GCashAdminClient() {
     }
   };
 
-  const fetchSettings = async () => {
-    const supabase = supabaseBrowser();
-    const { data, error } = await supabase
-      .from('app_settings')
-      .select('key, value')
-      .in('key', ['gcash_fee_rules', 'gcash_account_name', 'gcash_account_number']);
-    if (error) return;
-    const map = new Map<string, unknown>();
-    for (const row of data ?? []) map.set(row.key, row.value);
-    setFeeRules(parseFeeRules(map.get('gcash_fee_rules')));
-    setAccountName(String(map.get('gcash_account_name') ?? ''));
-    setAccountNumber(String(map.get('gcash_account_number') ?? ''));
-  };
-
-  useEffect(() => {
-    fetchRequests();
-    fetchSettings();
-
-    // Subscribe to realtime changes
-    const supabase = supabaseBrowser();
-    const channel = supabase
-      .channel('gcash-changes')
-      .on('postgres_changes', 
-        { event: '*', schema: 'public', table: 'gcash_requests' },
-        () => fetchRequests()
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
-
   const getTransactionIcon = (type: string) => {
     const icons: { [key: string]: string } = {
       cash_in: '💵',
@@ -221,8 +209,6 @@ export default function GCashAdminClient() {
       </div>
     );
   }
-
-  const [activeTab, setActiveTab] = useState<'transactions' | 'settings'>('transactions');
 
   return (
     <div className="min-h-screen bg-stone-50 p-4 sm:p-6 lg:p-8">

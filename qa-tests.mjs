@@ -188,6 +188,48 @@ async function runTests() {
     }
   });
 
+  // Admin GCash Manager navigation and tab switching check
+  test("Admin GCash manager route loads cleanly without hook order errors", async () => {
+    const errors = [];
+    page.on("pageerror", (err) => errors.push(err.message));
+    page.on("console", (msg) => {
+      if (msg.type() === "error" && msg.text().includes("Rendered more hooks")) {
+        errors.push(msg.text());
+      }
+    });
+
+    await page.goto("http://localhost:3000/admin/gcash", { waitUntil: "networkidle" });
+
+    // If on /admin/gcash (authenticated context), switch tabs
+    const settingsBtn = page.getByRole("button", { name: "SETTINGS" });
+    if (await settingsBtn.isVisible()) {
+      await settingsBtn.click();
+      await page.waitForTimeout(300);
+      await page.getByRole("button", { name: "TRANSACTIONS" }).click();
+      await page.waitForTimeout(300);
+      await settingsBtn.click();
+      await page.waitForTimeout(300);
+    }
+
+    if (errors.some(e => e.includes("Rendered more hooks"))) {
+      throw new Error(`Hook order error detected: ${errors.join(", ")}`);
+    }
+  });
+
+  // Admin QR Services Settings Tab check
+  test("Admin QR services Settings exposes QR DESTINATION and GCASH RECEIVING ACCOUNT", async () => {
+    await page.goto("http://localhost:3000/admin/qr-services", { waitUntil: "networkidle" });
+    const settingsTab = page.getByRole("button", { name: "Settings" });
+    if (await settingsTab.isVisible()) {
+      await settingsTab.click();
+      await page.waitForTimeout(300);
+      const text = await page.evaluate(() => document.body.innerText);
+      if (!text.includes("QR DESTINATION") || !text.includes("GCASH RECEIVING ACCOUNT")) {
+        throw new Error("Missing QR Destination or GCash Receiving Account section in QR Services Settings");
+      }
+    }
+  });
+
   let passed = 0;
   let failed = 0;
   for (const t of tests) {

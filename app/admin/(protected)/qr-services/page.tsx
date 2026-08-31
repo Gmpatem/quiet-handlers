@@ -11,6 +11,12 @@ export default async function QRServicesPage() {
     supabase
       .from("app_settings")
       .select("key, value")
+      .in("key", [
+        "site_url",
+        "gcash_account_name",
+        "gcash_account_number",
+        "gcash_qr_url",
+      ])
       .then((r) => r.data ?? []),
     resolveProductionBaseUrl().catch(() => ""),
     getAllServiceQrDataUrls().catch(() => ({ print: "", borrow: "", gcash: "" })),
@@ -20,6 +26,17 @@ export default async function QRServicesPage() {
   for (const s of appSettings) settingsMap.set(s.key, s.value);
 
   const siteUrl = String(settingsMap.get("site_url") ?? "").trim() || baseUrl || "";
+  const gcashAccountName = String(settingsMap.get("gcash_account_name") ?? "");
+  const gcashAccountNumber = String(settingsMap.get("gcash_account_number") ?? "");
+  const gcashQrUrl = String(settingsMap.get("gcash_qr_url") ?? "");
 
-  return <QRServicesClient initialSiteUrl={siteUrl} initialQrUrls={qrUrls} />;
+  return (
+    <QRServicesClient
+      initialSiteUrl={siteUrl}
+      initialQrUrls={qrUrls}
+      initialGCashAccountName={gcashAccountName}
+      initialGCashAccountNumber={gcashAccountNumber}
+      initialGCashQrUrl={gcashQrUrl}
+    />
+  );
 }

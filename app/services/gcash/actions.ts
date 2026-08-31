@@ -253,6 +253,7 @@ export async function saveOwnerGCashSettings(
     }
 
     revalidatePath("/admin/gcash");
+    revalidatePath("/admin/qr-services");
     revalidatePath("/services/gcash");
     return { success: true };
   } catch (err: any) {
