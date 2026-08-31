@@ -73,49 +73,51 @@ export default function PrintSheetClient({ baseUrl, qrUrls }: PrintSheetClientPr
 
       {/* A4 Sheet */}
       <div className="mx-auto max-w-[210mm] bg-white p-6 sm:p-8">
-        <div className="mb-8 text-center">
-          <div className="mb-2 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-stone-600 to-amber-900 text-lg font-bold text-white">
+        <div className="mb-6 text-center">
+          <div className="mb-2 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-stone-700 to-amber-900 text-lg font-bold text-white shadow-sm">
             FDS
           </div>
-          <h2 className="text-2xl font-bold text-stone-900">Scan a Service</h2>
-          <p className="text-sm text-stone-500">Point your phone camera at any code</p>
+          <h2 className="text-2xl font-bold tracking-tight text-stone-900">Scan a Service</h2>
+          <p className="text-xs text-stone-500 font-medium">Point your phone camera at any code to begin</p>
         </div>
 
-        <div className="grid gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
           {QR_SERVICES.map((service) => (
             <div
               key={service.key}
-              className="qr-sheet-card flex items-center gap-5 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm"
+              className="qr-sheet-card flex flex-col items-center justify-between rounded-2xl border-2 border-stone-200 bg-white p-5 text-center shadow-xs"
             >
-              <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-xl bg-amber-100 text-2xl text-amber-800">
-                {service.icon}
+              <div className="w-full">
+                <div className="mb-1 flex items-center justify-center gap-2">
+                  <span className="text-2xl">{service.icon}</span>
+                  <h3 className="text-lg font-extrabold tracking-wide text-stone-900">{service.title}</h3>
+                </div>
+                <p className="text-xs font-semibold text-amber-900/80 mb-3">{service.instruction}</p>
               </div>
-              <div className="flex-1">
-                <h3 className="text-lg font-bold text-stone-900">{service.title}</h3>
-                <p className="text-sm text-stone-500">{service.instruction}</p>
-                <p className="mt-1 break-all text-xs text-stone-400">
-                  {baseUrl}
-                  {service.path}
-                </p>
-              </div>
-              <div className="flex-shrink-0">
+
+              <div className="my-2 flex items-center justify-center">
                 {qrUrls[service.key] ? (
                   <img
                     src={qrUrls[service.key]}
                     alt={`${service.title} QR`}
-                    className="h-28 w-28 rounded-xl sm:h-32 sm:w-32"
+                    className="h-36 w-36 sm:h-40 sm:w-40 rounded-xl"
                   />
                 ) : (
-                  <div className="flex h-28 w-28 items-center justify-center rounded-xl bg-stone-100 text-xs text-stone-500 sm:h-32 sm:w-32">
+                  <div className="flex h-36 w-36 sm:h-40 sm:w-40 items-center justify-center rounded-xl bg-stone-100 text-xs text-stone-500">
                     No QR
                   </div>
                 )}
               </div>
+
+              <p className="mt-2 truncate w-full text-[11px] font-mono text-stone-400">
+                {baseUrl}
+                {service.path}
+              </p>
             </div>
           ))}
         </div>
 
-        <div className="mt-8 text-center text-xs text-stone-400">
+        <div className="mt-6 text-center text-xs text-stone-400 font-medium">
           Powered by Tenpesorun · {new Date().getFullYear()}
         </div>
       </div>

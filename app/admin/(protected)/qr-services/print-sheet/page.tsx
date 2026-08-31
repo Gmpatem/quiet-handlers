@@ -12,8 +12,9 @@ export default async function PrintSheetPage() {
   const baseUrl = await resolveProductionBaseUrl().catch(() => "");
   const qrUrls = await getAllServiceQrDataUrls(baseUrl).catch(() => ({
     print: "",
-    borrow: "",
     gcash: "",
+    credit: "",
+    store: "",
   }));
 
   return <PrintSheetClient baseUrl={baseUrl} qrUrls={qrUrls} />;

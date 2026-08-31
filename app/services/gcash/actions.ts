@@ -96,7 +96,7 @@ export async function submitGCashRequest(
     // Duplicate guard: same contact + same amount within last 30 seconds
     const thirtySecondsAgo = new Date(Date.now() - 30 * 1000).toISOString();
     try {
-      const { data: recent } = await supabase
+      const { data: recent } = await (supabase as any)
         .from("gcash_requests")
         .select("id")
         .eq("student_contact", data.studentContact.trim())
@@ -114,7 +114,7 @@ export async function submitGCashRequest(
 
     const requestId = crypto.randomUUID();
 
-    const { error: insertError } = await supabase
+    const { error: insertError } = await (supabase as any)
       .from("gcash_requests")
       .insert({
         id: requestId,

@@ -149,7 +149,7 @@ export async function submitPrintingRequest(
     // Duplicate guard: same name + same total within last 30 seconds
     const thirtySecondsAgo = new Date(Date.now() - 30 * 1000).toISOString();
     try {
-      const { data: recent } = await supabase
+      const { data: recent } = await (supabase as any)
         .from("printing_requests")
         .select("id")
         .eq("student_name", data.studentName.trim())
@@ -166,7 +166,7 @@ export async function submitPrintingRequest(
 
     const requestId = crypto.randomUUID();
 
-    const { error: insertError } = await supabase
+    const { error: insertError } = await (supabase as any)
       .from("printing_requests")
       .insert({
         id: requestId,

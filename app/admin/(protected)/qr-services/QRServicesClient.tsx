@@ -207,7 +207,7 @@ export default function QRServicesClient({
             </p>
           </div>
 
-          <div className="grid gap-6 md:grid-cols-3">
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
             {QR_SERVICES.map((service) => (
               <div
                 key={service.key}
@@ -233,7 +233,7 @@ export default function QRServicesClient({
                 </p>
                 <button
                   onClick={() => downloadQr(service.key)}
-                  className="flex items-center gap-1 rounded-lg bg-stone-100 px-3 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-200"
+                  className="mx-auto flex items-center gap-1 rounded-lg bg-stone-100 px-3 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-200 transition"
                 >
                   <Download className="h-3.5 w-3.5" /> Download
                 </button>

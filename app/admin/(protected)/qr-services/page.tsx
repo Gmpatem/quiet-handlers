@@ -19,7 +19,7 @@ export default async function QRServicesPage() {
       ])
       .then((r) => r.data ?? []),
     resolveProductionBaseUrl().catch(() => ""),
-    getAllServiceQrDataUrls().catch(() => ({ print: "", borrow: "", gcash: "" })),
+    getAllServiceQrDataUrls().catch(() => ({ print: "", gcash: "", credit: "", store: "" })),
   ]);
 
   const settingsMap = new Map<string, unknown>();
