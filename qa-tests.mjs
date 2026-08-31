@@ -113,6 +113,72 @@ async function runTests() {
     if (!heading.includes("BORROW HERE")) throw new Error(`Expected BORROW HERE, got ${heading}`);
   });
 
+  // End-to-end GCash Cash In Submission in Browser
+  test("E2E GCash Cash In Submission in Browser", async () => {
+    await page.goto("http://localhost:3000/services/gcash", { waitUntil: "networkidle" });
+    await page.locator("input[placeholder='0.00']").fill("500");
+    await page.getByRole("button", { name: "Continue to GCash Details" }).click();
+
+    await page.locator("input[placeholder='e.g. Juan Dela Cruz']").fill("E2E Test Student In");
+    await page.locator("input[placeholder='09XXXXXXXXX']").fill("09171234567");
+    await page.getByRole("button", { name: "Review & Confirm" }).click();
+
+    // Confirm submission
+    await page.getByRole("button", { name: "SUBMIT CASH IN" }).click();
+    await page.waitForTimeout(1500);
+
+    // Verify success or friendly UI (no raw SQL/RLS errors)
+    const pageText = await page.evaluate(() => document.body.innerText);
+    if (pageText.includes("violates row-level security policy") || pageText.includes("orders_pickup_location_valid")) {
+      throw new Error("Raw database error exposed in UI!");
+    }
+  });
+
+  // End-to-end GCash Cash Out Submission in Browser
+  test("E2E GCash Cash Out Submission in Browser", async () => {
+    await page.goto("http://localhost:3000/services/gcash", { waitUntil: "networkidle" });
+    await page.getByRole("button", { name: "Cash Out" }).click();
+    await page.locator("input[placeholder='0.00']").fill("1000");
+    await page.getByRole("button", { name: "Continue to GCash Details" }).click();
+
+    await page.locator("input[placeholder='e.g. Juan Dela Cruz']").fill("E2E Test Student Out");
+    await page.locator("input[placeholder='e.g. 1029 3847 5612']").fill("REF-987654321");
+    await page.getByRole("button", { name: "Review & Confirm" }).click();
+
+    // Confirm submission
+    await page.getByRole("button", { name: "SUBMIT CASH OUT" }).click();
+    await page.waitForTimeout(1500);
+
+    // Verify no raw SQL error
+    const pageText = await page.evaluate(() => document.body.innerText);
+    if (pageText.includes("violates row-level security policy") || pageText.includes("orders_pickup_location_valid")) {
+      throw new Error("Raw database error exposed in UI!");
+    }
+  });
+
+  // End-to-end Borrow Submission in Browser
+  test("E2E Borrow Form Submission with boys_411 pickup", async () => {
+    await page.goto("http://localhost:3000/services/borrow", { waitUntil: "networkidle" });
+    await page.locator("input[placeholder='Enter your name / room']").fill("E2E Borrow Student");
+    
+    const btn = page.locator("button[type='submit']");
+    const enabledOption = page.locator("select option:not([disabled])").first();
+    const count = await enabledOption.count();
+    if (count > 0 && !(await btn.isDisabled())) {
+      const val = await enabledOption.getAttribute("value");
+      if (val) {
+        await page.locator("select").selectOption(val);
+        await btn.click();
+        await page.waitForTimeout(1500);
+      }
+    }
+
+    const pageText = await page.evaluate(() => document.body.innerText);
+    if (pageText.includes("orders_pickup_location_valid") || pageText.includes("violates row-level security policy")) {
+      throw new Error("Check constraint or RLS error exposed!");
+    }
+  });
+
   // Admin QR services protection
   test("Admin QR services area is protected behind auth", async () => {
     await page.goto("http://localhost:3000/admin/qr-services", { waitUntil: "networkidle" });

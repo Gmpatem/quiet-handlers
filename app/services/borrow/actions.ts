@@ -60,7 +60,7 @@ export async function submitBorrowRequest(data: BorrowFormData): Promise<ActionR
       p_contact: data.borrowerName.trim(),
       p_notes: `[BORROW] Borrower: ${data.borrowerName.trim()}`,
       p_fulfillment: "pickup",
-      p_pickup_location: "Store",
+      p_pickup_location: "boys_411",
       p_delivery_fee_cents: 0,
       p_delivery_location: "",
       p_payment_method: "credit",
@@ -72,7 +72,12 @@ export async function submitBorrowRequest(data: BorrowFormData): Promise<ActionR
 
     if (rpcError) {
       console.error("place_order_atomic error:", rpcError);
-      return { success: false, error: rpcError.message || "Failed to process borrowing" };
+      return {
+        success: false,
+        error: rpcError.message?.includes("insufficient")
+          ? "Item is currently out of stock"
+          : "We couldn't submit your borrowing request. Please try again or visit Room 411.",
+      };
     }
 
     // Optional audit entry in borrowings table
@@ -85,8 +90,8 @@ export async function submitBorrowRequest(data: BorrowFormData): Promise<ActionR
         quantity: data.quantity,
         status: "borrowed",
       });
-    } catch {
-      // Non-blocking audit record
+    } catch (auditErr) {
+      console.warn("Audit record notice:", auditErr);
     }
 
     revalidatePath("/admin/credit-orders");
@@ -98,7 +103,10 @@ export async function submitBorrowRequest(data: BorrowFormData): Promise<ActionR
     return { success: true, requestId: orderCode };
   } catch (error: any) {
     console.error("Submit borrow request error:", error);
-    return { success: false, error: error?.message || "Failed to submit borrowing" };
+    return {
+      success: false,
+      error: "We couldn't submit your borrowing request. Please try again or visit Room 411.",
+    };
   }
 }
 

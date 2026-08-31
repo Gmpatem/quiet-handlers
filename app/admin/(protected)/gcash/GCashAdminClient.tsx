@@ -222,6 +222,8 @@ export default function GCashAdminClient() {
     );
   }
 
+  const [activeTab, setActiveTab] = useState<'transactions' | 'settings'>('transactions');
+
   return (
     <div className="min-h-screen bg-stone-50 p-4 sm:p-6 lg:p-8">
       {/* Header */}
@@ -231,317 +233,348 @@ export default function GCashAdminClient() {
             <CreditCard className="w-8 h-8 text-white" />
             <div>
               <h1 className="text-2xl sm:text-3xl font-bold text-white">GCash Service Admin</h1>
-              <p className="text-white/90 text-sm">Manage cash-in & cash-out transactions</p>
+              <p className="text-white/90 text-sm">Manage transactions and configure owner receiving account</p>
             </div>
           </div>
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto space-y-6">
-        {/* Stats Grid */}
-        <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
-          <div className="bg-white rounded-xl p-4 border-2 border-stone-200 shadow-lg">
-            <p className="text-stone-600 text-xs font-medium mb-1">Pending</p>
-            <p className="text-2xl font-bold text-yellow-600">{stats.pending}</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 border-2 border-stone-200 shadow-lg">
-            <p className="text-stone-600 text-xs font-medium mb-1">Processing</p>
-            <p className="text-2xl font-bold text-blue-600">{stats.processing}</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 border-2 border-stone-200 shadow-lg">
-            <p className="text-stone-600 text-xs font-medium mb-1">Completed</p>
-            <p className="text-2xl font-bold text-green-600">{stats.completed}</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 border-2 border-stone-200 shadow-lg">
-            <p className="text-stone-600 text-xs font-medium mb-1">Today</p>
-            <p className="text-2xl font-bold text-amber-700">{stats.total_today}</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 border-2 border-stone-200 shadow-lg">
-            <p className="text-stone-600 text-xs font-medium mb-1">Revenue</p>
-            <p className="text-2xl font-bold text-emerald-600">₱{stats.total_revenue.toFixed(2)}</p>
-          </div>
-          <div className="bg-white rounded-xl p-4 border-2 border-stone-200 shadow-lg">
-            <p className="text-stone-600 text-xs font-medium mb-1">Fees Earned</p>
-            <p className="text-2xl font-bold text-purple-600">₱{stats.total_fees.toFixed(2)}</p>
-          </div>
+        {/* Two Obvious Tabs: Transactions and Settings */}
+        <div className="flex gap-2 border-b-2 border-stone-200 pb-1">
+          <button
+            onClick={() => setActiveTab('transactions')}
+            className={`flex items-center gap-2 rounded-t-xl px-5 py-3 text-sm font-bold transition ${
+              activeTab === 'transactions'
+                ? 'border-b-2 border-amber-700 text-amber-800 bg-white shadow-sm -mb-[2px]'
+                : 'text-stone-500 hover:text-stone-800 hover:bg-stone-100'
+            }`}
+          >
+            <CreditCard className="h-4 w-4" />
+            TRANSACTIONS
+            <span className="ml-1 rounded-full bg-stone-100 px-2 py-0.5 text-xs text-stone-700 font-bold">
+              {requests.length}
+            </span>
+          </button>
+          <button
+            onClick={() => setActiveTab('settings')}
+            className={`flex items-center gap-2 rounded-t-xl px-5 py-3 text-sm font-bold transition ${
+              activeTab === 'settings'
+                ? 'border-b-2 border-amber-700 text-amber-800 bg-white shadow-sm -mb-[2px]'
+                : 'text-stone-500 hover:text-stone-800 hover:bg-stone-100'
+            }`}
+          >
+            <Settings className="h-4 w-4" />
+            SETTINGS
+          </button>
         </div>
 
-        {/* Settings */}
-        <div className="bg-white rounded-xl border-2 border-stone-200 shadow-lg overflow-hidden">
-          <button
-            onClick={() => setShowSettings((s) => !s)}
-            className="flex w-full items-center justify-between p-4 text-left hover:bg-stone-50"
-          >
-            <div className="flex items-center gap-2">
-              <Settings className="h-5 w-5 text-stone-600" />
-              <span className="font-semibold text-stone-900">Owner GCash Account & Fee Settings</span>
+        {activeTab === 'settings' && (
+          <div className="bg-white rounded-2xl border-2 border-stone-200 shadow-lg p-6 sm:p-8 space-y-8">
+            <div>
+              <h2 className="text-lg font-bold text-stone-900 flex items-center gap-2">
+                <Settings className="h-5 w-5 text-amber-700" />
+                MY GCASH ACCOUNT
+              </h2>
+              <p className="text-xs text-stone-500 mt-1">
+                Single source of truth. Customers performing Cash Out will see this Account Name, Mobile Number, and Receiving QR.
+              </p>
             </div>
-            <span className="text-sm text-stone-500">{showSettings ? 'Hide' : 'Show'}</span>
-          </button>
-          {showSettings && (
-            <div className="border-t-2 border-stone-200 p-4 sm:p-6 space-y-6">
-              {settingsSaved && (
-                <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-xs font-semibold text-emerald-800 flex items-center gap-2">
-                  <Check className="h-4 w-4 text-emerald-600" />
-                  GCash settings saved and updated system-wide!
-                </div>
-              )}
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1">
-                    Owner Account Name
-                  </label>
-                  <input
-                    type="text"
-                    value={accountName}
-                    onChange={(e) => setAccountName(e.target.value)}
-                    placeholder="e.g. TENPESORUN DORM STORE"
-                    className="w-full rounded-xl border-2 border-stone-200 px-3.5 py-2.5 text-sm focus:border-amber-700 focus:outline-none font-medium"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1">
-                    Owner GCash Mobile Number
-                  </label>
-                  <input
-                    type="text"
-                    value={accountNumber}
-                    onChange={(e) => setAccountNumber(e.target.value)}
-                    placeholder="09XXXXXXXXX"
-                    maxLength={11}
-                    className="w-full rounded-xl border-2 border-stone-200 px-3.5 py-2.5 text-sm font-mono font-bold tracking-wider focus:border-amber-700 focus:outline-none"
-                  />
-                </div>
+            {settingsSaved && (
+              <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-3.5 text-xs font-semibold text-emerald-800 flex items-center gap-2">
+                <Check className="h-4 w-4 text-emerald-600" />
+                GCash settings saved and updated system-wide!
               </div>
+            )}
 
-              {/* Owner GCash QR Section */}
-              <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4">
-                <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-2">
-                  Owner GCash Receiving QR
+            <div className="grid gap-6 sm:grid-cols-2">
+              <div>
+                <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1.5">
+                  ACCOUNT NAME
                 </label>
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                  {qrPreview || qrUrl ? (
-                    <div className="relative">
-                      <img
-                        src={qrPreview || qrUrl}
-                        alt="Owner GCash QR"
-                        className="h-28 w-28 rounded-xl border-2 border-stone-200 bg-white p-1 object-contain shadow-sm"
-                      />
-                    </div>
-                  ) : (
-                    <div className="h-28 w-28 rounded-xl border-2 border-dashed border-stone-300 bg-stone-100 flex flex-col items-center justify-center text-stone-400">
-                      <QrCode className="h-8 w-8 mb-1" />
-                      <span className="text-[10px] font-semibold">No QR Uploaded</span>
-                    </div>
-                  )}
+                <input
+                  type="text"
+                  value={accountName}
+                  onChange={(e) => setAccountName(e.target.value)}
+                  placeholder="e.g. TENPESORUN DORM STORE"
+                  className="w-full rounded-xl border-2 border-stone-200 px-4 py-3 text-sm focus:border-amber-700 focus:outline-none font-medium"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1.5">
+                  GCASH NUMBER (09...)
+                </label>
+                <input
+                  type="text"
+                  value={accountNumber}
+                  onChange={(e) => setAccountNumber(e.target.value)}
+                  placeholder="09XXXXXXXXX"
+                  maxLength={11}
+                  className="w-full rounded-xl border-2 border-stone-200 px-4 py-3 text-sm font-mono font-bold tracking-wider focus:border-amber-700 focus:outline-none"
+                />
+              </div>
+            </div>
 
-                  <div className="space-y-2">
-                    <input
-                      type="file"
-                      ref={qrInputRef}
-                      accept="image/*"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        setQrFile(file);
-                        setQrPreview(URL.createObjectURL(file));
-                      }}
-                      className="hidden"
+            {/* Owner GCash QR Section */}
+            <div className="rounded-2xl border-2 border-stone-200 bg-stone-50 p-6">
+              <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-3">
+                MY GCASH RECEIVING QR
+              </label>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
+                {qrPreview || qrUrl ? (
+                  <div className="relative">
+                    <img
+                      src={qrPreview || qrUrl}
+                      alt="Owner GCash QR"
+                      className="h-36 w-36 rounded-xl border-2 border-stone-200 bg-white p-1.5 object-contain shadow-sm"
                     />
-                    <div className="flex items-center gap-2">
+                  </div>
+                ) : (
+                  <div className="h-36 w-36 rounded-xl border-2 border-dashed border-stone-300 bg-stone-100 flex flex-col items-center justify-center text-stone-400">
+                    <QrCode className="h-10 w-10 mb-1" />
+                    <span className="text-xs font-semibold">No QR Uploaded</span>
+                  </div>
+                )}
+
+                <div className="space-y-3">
+                  <input
+                    type="file"
+                    ref={qrInputRef}
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      setQrFile(file);
+                      setQrPreview(URL.createObjectURL(file));
+                    }}
+                    className="hidden"
+                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => qrInputRef.current?.click()}
+                      className="flex items-center gap-2 rounded-xl bg-amber-800 px-4 py-2.5 text-xs font-bold text-white hover:bg-amber-900 shadow-sm transition"
+                    >
+                      <Upload className="h-4 w-4" /> {qrUrl || qrPreview ? 'REPLACE QR' : 'UPLOAD QR'}
+                    </button>
+                    {(qrUrl || qrPreview) && (
                       <button
                         type="button"
-                        onClick={() => qrInputRef.current?.click()}
-                        className="flex items-center gap-1.5 rounded-xl bg-amber-800 px-3.5 py-2 text-xs font-bold text-white hover:bg-amber-900 transition"
+                        onClick={() => {
+                          setQrFile(null);
+                          setQrPreview('');
+                          setQrUrl('');
+                        }}
+                        className="flex items-center gap-1.5 rounded-xl bg-stone-200 px-4 py-2.5 text-xs font-semibold text-stone-700 hover:bg-stone-300 transition"
                       >
-                        <Upload className="h-3.5 w-3.5" /> {qrUrl || qrPreview ? 'Replace QR' : 'Upload QR'}
+                        <Trash2 className="h-4 w-4" /> REMOVE QR
                       </button>
-                      {(qrUrl || qrPreview) && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setQrFile(null);
-                            setQrPreview('');
-                            setQrUrl('');
-                          }}
-                          className="flex items-center gap-1 rounded-xl bg-stone-200 px-3 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-300 transition"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" /> Remove
-                        </button>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-stone-500">
-                      This QR will be displayed to customers when performing Cash Out.
-                    </p>
+                    )}
                   </div>
+                  <p className="text-xs text-stone-500">
+                    This QR image is displayed to customers for scanning during Cash Out transactions.
+                  </p>
                 </div>
               </div>
-
-              {/* Fee Rules */}
-              <div>
-                <div className="mb-2 flex items-center justify-between">
-                  <label className="text-xs font-bold uppercase tracking-wider text-stone-700">Fee Rules Schedule</label>
-                  <button
-                    onClick={() =>
-                      setFeeRules((prev) => [
-                        ...prev,
-                        { min_amount: 0, max_amount: null, flat_fee: 0, percentage: 2, min_fee: 0, max_fee: 0 },
-                      ])
-                    }
-                    className="flex items-center gap-1 rounded-lg bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-800 hover:bg-amber-200"
-                  >
-                    <Plus className="h-3 w-3" /> Add Rule
-                  </button>
-                </div>
-                <div className="space-y-2">
-                  {feeRules.map((rule, idx) => (
-                    <div key={idx} className="grid gap-2 rounded-xl bg-stone-50 p-3 sm:grid-cols-6 items-center">
-                      <div>
-                        <span className="text-[10px] text-stone-400 block sm:hidden">Min Amount</span>
-                        <input
-                          type="number"
-                          placeholder="Min"
-                          value={rule.min_amount}
-                          onChange={(e) =>
-                            setFeeRules((prev) =>
-                              prev.map((r, i) => (i === idx ? { ...r, min_amount: Number(e.target.value) } : r))
-                            )
-                          }
-                          className="w-full rounded-lg border border-stone-200 px-2 py-1.5 text-sm"
-                        />
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-stone-400 block sm:hidden">Max Amount</span>
-                        <input
-                          type="number"
-                          placeholder="Max"
-                          value={rule.max_amount ?? ''}
-                          onChange={(e) =>
-                            setFeeRules((prev) =>
-                              prev.map((r, i) =>
-                                i === idx
-                                  ? { ...r, max_amount: e.target.value === '' ? null : Number(e.target.value) }
-                                  : r
-                              )
-                            )
-                          }
-                          className="w-full rounded-lg border border-stone-200 px-2 py-1.5 text-sm"
-                        />
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-stone-400 block sm:hidden">Flat Fee</span>
-                        <input
-                          type="number"
-                          placeholder="Flat"
-                          value={rule.flat_fee}
-                          onChange={(e) =>
-                            setFeeRules((prev) =>
-                              prev.map((r, i) => (i === idx ? { ...r, flat_fee: Number(e.target.value) } : r))
-                            )
-                          }
-                          className="w-full rounded-lg border border-stone-200 px-2 py-1.5 text-sm"
-                        />
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-stone-400 block sm:hidden">Percentage (%)</span>
-                        <input
-                          type="number"
-                          placeholder="%"
-                          value={rule.percentage}
-                          onChange={(e) =>
-                            setFeeRules((prev) =>
-                              prev.map((r, i) => (i === idx ? { ...r, percentage: Number(e.target.value) } : r))
-                            )
-                          }
-                          className="w-full rounded-lg border border-stone-200 px-2 py-1.5 text-sm font-bold text-amber-800"
-                        />
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-stone-400 block sm:hidden">Min Fee</span>
-                        <input
-                          type="number"
-                          placeholder="Min fee"
-                          value={rule.min_fee}
-                          onChange={(e) =>
-                            setFeeRules((prev) =>
-                              prev.map((r, i) => (i === idx ? { ...r, min_fee: Number(e.target.value) } : r))
-                            )
-                          }
-                          className="w-full rounded-lg border border-stone-200 px-2 py-1.5 text-sm"
-                        />
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          placeholder="Max fee"
-                          value={rule.max_fee}
-                          onChange={(e) =>
-                            setFeeRules((prev) =>
-                              prev.map((r, i) => (i === idx ? { ...r, max_fee: Number(e.target.value) } : r))
-                            )
-                          }
-                          className="flex-1 rounded-lg border border-stone-200 px-2 py-1.5 text-sm"
-                        />
-                        <button
-                          onClick={() => setFeeRules((prev) => prev.filter((_, i) => i !== idx))}
-                          className="rounded-lg bg-red-100 p-1.5 text-red-700 hover:bg-red-200"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-2 text-xs text-stone-500">
-                  Preview: ₱500 → fee {formatPeso(calculateGCashFee(feeRules, 500).serviceFee)}, ₱1,000 → fee{' '}
-                  {formatPeso(calculateGCashFee(feeRules, 1000).serviceFee)}
-                </div>
-              </div>
-
-              <button
-                onClick={async () => {
-                  setSettingsLoading(true);
-                  setSettingsSaved(false);
-                  try {
-                    let finalQrUrl = qrUrl;
-                    if (qrFile) {
-                      const formData = new FormData();
-                      formData.append('qrFile', qrFile);
-                      const { uploadOwnerGCashQR } = await import('@/app/services/gcash/actions');
-                      const uploadRes = await uploadOwnerGCashQR(formData);
-                      if (uploadRes.success && uploadRes.data?.url) {
-                        finalQrUrl = uploadRes.data.url;
-                        setQrUrl(finalQrUrl);
-                      }
-                    }
-
-                    const { saveOwnerGCashSettings } = await import('@/app/services/gcash/actions');
-                    const res = await saveOwnerGCashSettings(accountName, accountNumber, finalQrUrl, feeRules);
-                    if (res.success) {
-                      setSettingsSaved(true);
-                      setTimeout(() => setSettingsSaved(false), 4000);
-                    } else {
-                      alert(res.error || 'Failed to save settings');
-                    }
-                  } catch (err) {
-                    console.error('Settings save error:', err);
-                    alert('Failed to save settings');
-                  } finally {
-                    setSettingsLoading(false);
-                  }
-                }}
-                disabled={settingsLoading}
-                className="flex items-center gap-2 rounded-xl bg-amber-800 px-5 py-2.5 text-sm font-bold text-white hover:bg-amber-900 disabled:opacity-60 transition"
-              >
-                <Save className="h-4 w-4" /> {settingsLoading ? 'Saving...' : 'Save Settings'}
-              </button>
             </div>
-          )}
-        </div>
 
-        {/* Filters */}
-        <div className="bg-white rounded-xl p-4 border-2 border-stone-200 shadow-lg">
+            {/* Fee Rules Schedule */}
+            <div>
+              <div className="mb-3 flex items-center justify-between">
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-wider text-stone-700">Fee Rules Schedule</label>
+                  <p className="text-xs text-stone-500">Default: 3% under ₱1,000, 2% for ₱1,000 and above</p>
+                </div>
+                <button
+                  onClick={() =>
+                    setFeeRules((prev) => [
+                      ...prev,
+                      { min_amount: 0, max_amount: null, flat_fee: 0, percentage: 2, min_fee: 0, max_fee: 0 },
+                    ])
+                  }
+                  className="flex items-center gap-1 rounded-lg bg-amber-100 px-3 py-1.5 text-xs font-bold text-amber-800 hover:bg-amber-200"
+                >
+                  <Plus className="h-3 w-3" /> Add Rule
+                </button>
+              </div>
+              <div className="space-y-2">
+                {feeRules.map((rule, idx) => (
+                  <div key={idx} className="grid gap-2 rounded-xl bg-stone-50 p-3 sm:grid-cols-6 items-center border border-stone-200">
+                    <div>
+                      <span className="text-[10px] text-stone-400 block sm:hidden">Min Amount</span>
+                      <input
+                        type="number"
+                        placeholder="Min"
+                        value={rule.min_amount}
+                        onChange={(e) =>
+                          setFeeRules((prev) =>
+                            prev.map((r, i) => (i === idx ? { ...r, min_amount: Number(e.target.value) } : r))
+                          )
+                        }
+                        className="w-full rounded-lg border border-stone-200 px-2 py-1.5 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-stone-400 block sm:hidden">Max Amount</span>
+                      <input
+                        type="number"
+                        placeholder="Max"
+                        value={rule.max_amount ?? ''}
+                        onChange={(e) =>
+                          setFeeRules((prev) =>
+                            prev.map((r, i) =>
+                              i === idx
+                                ? { ...r, max_amount: e.target.value === '' ? null : Number(e.target.value) }
+                                : r
+                            )
+                          )
+                        }
+                        className="w-full rounded-lg border border-stone-200 px-2 py-1.5 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-stone-400 block sm:hidden">Flat Fee</span>
+                      <input
+                        type="number"
+                        placeholder="Flat"
+                        value={rule.flat_fee}
+                        onChange={(e) =>
+                          setFeeRules((prev) =>
+                            prev.map((r, i) => (i === idx ? { ...r, flat_fee: Number(e.target.value) } : r))
+                          )
+                        }
+                        className="w-full rounded-lg border border-stone-200 px-2 py-1.5 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-stone-400 block sm:hidden">Percentage (%)</span>
+                      <input
+                        type="number"
+                        placeholder="%"
+                        value={rule.percentage}
+                        onChange={(e) =>
+                          setFeeRules((prev) =>
+                            prev.map((r, i) => (i === idx ? { ...r, percentage: Number(e.target.value) } : r))
+                          )
+                        }
+                        className="w-full rounded-lg border border-stone-200 px-2 py-1.5 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-stone-400 block sm:hidden">Min Fee</span>
+                      <input
+                        type="number"
+                        placeholder="Min fee"
+                        value={rule.min_fee}
+                        onChange={(e) =>
+                          setFeeRules((prev) =>
+                            prev.map((r, i) => (i === idx ? { ...r, min_fee: Number(e.target.value) } : r))
+                          )
+                        }
+                        className="w-full rounded-lg border border-stone-200 px-2 py-1.5 text-sm"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        placeholder="Max fee"
+                        value={rule.max_fee}
+                        onChange={(e) =>
+                          setFeeRules((prev) =>
+                            prev.map((r, i) => (i === idx ? { ...r, max_fee: Number(e.target.value) } : r))
+                          )
+                        }
+                        className="flex-1 rounded-lg border border-stone-200 px-2 py-1.5 text-sm"
+                      />
+                      <button
+                        onClick={() => setFeeRules((prev) => prev.filter((_, i) => i !== idx))}
+                        className="rounded-lg bg-red-100 p-1.5 text-red-700 hover:bg-red-200"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2 text-xs text-stone-500">
+                Live Preview: ₱500 → fee {formatPeso(calculateGCashFee(feeRules, 500).serviceFee)}, ₱1,000 → fee{' '}
+                {formatPeso(calculateGCashFee(feeRules, 1000).serviceFee)}
+              </div>
+            </div>
+
+            <button
+              onClick={async () => {
+                setSettingsLoading(true);
+                setSettingsSaved(false);
+                try {
+                  let finalQrUrl = qrUrl;
+                  if (qrFile) {
+                    const formData = new FormData();
+                    formData.append('qrFile', qrFile);
+                    const { uploadOwnerGCashQR } = await import('@/app/services/gcash/actions');
+                    const uploadRes = await uploadOwnerGCashQR(formData);
+                    if (uploadRes.success && uploadRes.data?.url) {
+                      finalQrUrl = uploadRes.data.url;
+                      setQrUrl(finalQrUrl);
+                    }
+                  }
+
+                  const { saveOwnerGCashSettings } = await import('@/app/services/gcash/actions');
+                  const res = await saveOwnerGCashSettings(accountName, accountNumber, finalQrUrl, feeRules);
+                  if (res.success) {
+                    setSettingsSaved(true);
+                    setTimeout(() => setSettingsSaved(false), 5000);
+                  } else {
+                    alert(res.error || 'Failed to save settings');
+                  }
+                } catch (err: any) {
+                  alert(err?.message || 'Failed to save settings');
+                } finally {
+                  setSettingsLoading(false);
+                }
+              }}
+              disabled={settingsLoading}
+              className="flex items-center justify-center gap-2 rounded-xl bg-amber-800 px-6 py-3.5 text-sm font-bold text-white shadow-md hover:bg-amber-900 disabled:opacity-50 transition"
+            >
+              <Save className="h-4 w-4" />
+              {settingsLoading ? 'Saving Settings...' : 'SAVE SETTINGS'}
+            </button>
+          </div>
+        )}
+
+        {activeTab === 'transactions' && (
+          <div className="space-y-6">
+            {/* Stats Grid */}
+            <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
+              <div className="bg-white rounded-xl p-4 border-2 border-stone-200 shadow-lg">
+                <p className="text-stone-600 text-xs font-medium mb-1">Pending</p>
+                <p className="text-2xl font-bold text-yellow-600">{stats.pending}</p>
+              </div>
+              <div className="bg-white rounded-xl p-4 border-2 border-stone-200 shadow-lg">
+                <p className="text-stone-600 text-xs font-medium mb-1">Processing</p>
+                <p className="text-2xl font-bold text-blue-600">{stats.processing}</p>
+              </div>
+              <div className="bg-white rounded-xl p-4 border-2 border-stone-200 shadow-lg">
+                <p className="text-stone-600 text-xs font-medium mb-1">Completed</p>
+                <p className="text-2xl font-bold text-green-600">{stats.completed}</p>
+              </div>
+              <div className="bg-white rounded-xl p-4 border-2 border-stone-200 shadow-lg">
+                <p className="text-stone-600 text-xs font-medium mb-1">Today</p>
+                <p className="text-2xl font-bold text-amber-700">{stats.total_today}</p>
+              </div>
+              <div className="bg-white rounded-xl p-4 border-2 border-stone-200 shadow-lg">
+                <p className="text-stone-600 text-xs font-medium mb-1">Revenue</p>
+                <p className="text-2xl font-bold text-emerald-600">₱{stats.total_revenue.toFixed(2)}</p>
+              </div>
+              <div className="bg-white rounded-xl p-4 border-2 border-stone-200 shadow-lg">
+                <p className="text-stone-600 text-xs font-medium mb-1">Fees Earned</p>
+                <p className="text-2xl font-bold text-purple-600">₱{stats.total_fees.toFixed(2)}</p>
+              </div>
+            </div>
+
+            {/* Filters */}
+            <div className="bg-white rounded-xl p-4 border-2 border-stone-200 shadow-lg">
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-400" />
@@ -640,6 +673,8 @@ export default function GCashAdminClient() {
           </div>
         </div>
       </div>
+    )}
+  </div>
 
       {/* View Details Modal */}
       {selectedRequest && (

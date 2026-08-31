@@ -1,7 +1,11 @@
 import QRCode from "qrcode";
-import { headers } from "next/headers";
 import { supabaseServer } from "@/lib/supabaseServer";
-import { QR_SERVICES, QR_SERVICE_PATHS, type QRServiceKey } from "@/lib/qr";
+import {
+  QR_SERVICES,
+  QR_SERVICE_PATHS,
+  CANONICAL_PRODUCTION_DOMAIN,
+  type QRServiceKey,
+} from "@/lib/qr";
 
 export async function resolveProductionBaseUrl(): Promise<string> {
   try {
@@ -14,33 +18,33 @@ export async function resolveProductionBaseUrl(): Promise<string> {
       .single();
 
     const configured = data?.value ? String(data.value).trim() : "";
-    if (configured && configured.startsWith("http")) {
+    if (
+      configured &&
+      configured.startsWith("http") &&
+      !configured.includes("localhost") &&
+      !configured.includes("127.0.0.1") &&
+      !configured.includes("-projects-")
+    ) {
       return configured.replace(/\/$/, "");
     }
   } catch (err) {
     console.error("Failed to load site_url setting:", err);
   }
 
-  // 2. Environment variable
-  const envUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_VERCEL_URL;
-  if (envUrl) {
+  // 2. Explicit custom production site URL
+  const envUrl = process.env.NEXT_PUBLIC_SITE_URL;
+  if (
+    envUrl &&
+    !envUrl.includes("localhost") &&
+    !envUrl.includes("127.0.0.1") &&
+    !envUrl.includes("-projects-")
+  ) {
     const url = envUrl.startsWith("http") ? envUrl : `https://${envUrl}`;
     return url.replace(/\/$/, "");
   }
 
-  // 3. Request headers fallback (server-only)
-  try {
-    const h = await headers();
-    const host = h.get("host");
-    const protocol = h.get("x-forwarded-proto") === "https" ? "https" : "http";
-    if (host) {
-      return `${protocol}://${host}`.replace(/\/$/, "");
-    }
-  } catch {
-    // headers() throws in client context; ignore
-  }
-
-  return "";
+  // 3. Stable Canonical Production Domain
+  return CANONICAL_PRODUCTION_DOMAIN;
 }
 
 export async function getServiceQrDataUrl(

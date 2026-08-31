@@ -91,13 +91,25 @@ export async function uploadPaymentProof(formData: FormData): Promise<ActionResu
   }
 }
 
+async function getDbClient() {
+  try {
+    if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      const { supabaseAdmin } = await import("@/lib/supabase/admin");
+      return supabaseAdmin();
+    }
+  } catch (err) {
+    console.warn("Could not load supabaseAdmin, falling back to supabaseServer", err);
+  }
+  return await supabaseServer();
+}
+
 export async function submitPrintingRequest(
   data: PrintingFormData,
   pdfUrl?: string,
   paymentProofUrl?: string
 ): Promise<ActionResult> {
   try {
-    const supabase = await supabaseServer();
+    const supabase = await getDbClient();
 
     if (!data.studentName.trim()) {
       return { success: false, error: "Student name is required" };
@@ -136,21 +148,28 @@ export async function submitPrintingRequest(
 
     // Duplicate guard: same name + same total within last 30 seconds
     const thirtySecondsAgo = new Date(Date.now() - 30 * 1000).toISOString();
-    const { data: recent } = await supabase
-      .from("printing_requests")
-      .select("id")
-      .eq("student_name", data.studentName.trim())
-      .eq("total_amount", expected.total)
-      .gte("created_at", thirtySecondsAgo)
-      .limit(1);
+    try {
+      const { data: recent } = await supabase
+        .from("printing_requests")
+        .select("id")
+        .eq("student_name", data.studentName.trim())
+        .eq("total_amount", expected.total)
+        .gte("created_at", thirtySecondsAgo)
+        .limit(1);
 
-    if (recent && recent.length > 0) {
-      return { success: false, error: "Duplicate request detected. Please wait a moment." };
+      if (recent && recent.length > 0) {
+        return { success: false, error: "Duplicate request detected. Please wait a moment." };
+      }
+    } catch {
+      // Non-blocking duplicate check
     }
 
-    const { data: inserted, error: insertError } = await supabase
+    const requestId = crypto.randomUUID();
+
+    const { error: insertError } = await supabase
       .from("printing_requests")
       .insert({
+        id: requestId,
         student_name: data.studentName.trim(),
         service_type: data.serviceType,
         pdf_url: pdfUrl || null,
@@ -167,21 +186,25 @@ export async function submitPrintingRequest(
         payment_status: data.paymentMethod === "gcash" ? "paid" : "unpaid",
         status: "pending",
         pricing_snapshot: expected.snapshot,
-      })
-      .select("id")
-      .single();
+      });
 
     if (insertError) {
       console.error("Database insert error:", insertError);
-      return { success: false, error: insertError.message || "Failed to submit request" };
+      return {
+        success: false,
+        error: "We couldn't submit your print request. Please try again or visit Room 411.",
+      };
     }
 
     revalidatePath("/admin/printing");
     revalidatePath("/admin/qr-services");
-    return { success: true, requestId: inserted?.id };
+    return { success: true, requestId };
   } catch (error: any) {
     console.error("Submit request error:", error);
-    return { success: false, error: error?.message || "Failed to submit request" };
+    return {
+      success: false,
+      error: "We couldn't submit your print request. Please try again.",
+    };
   }
 }
 

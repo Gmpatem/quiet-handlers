@@ -1,3 +1,5 @@
+export const CANONICAL_PRODUCTION_DOMAIN = "https://quiet-handlers.vercel.app";
+
 export const QR_SERVICE_PATHS = {
   print: "/services/print",
   borrow: "/services/borrow",

@@ -69,6 +69,23 @@ create policy "borrowings admin all"
   using (public.is_admin())
   with check (public.is_admin());
 
+-- Ensure explicit public insert policies on existing service tables
+alter table public.printing_requests enable row level security;
+drop policy if exists "printing requests public insert" on public.printing_requests;
+create policy "printing requests public insert"
+  on public.printing_requests
+  for insert
+  to anon, authenticated
+  with check (true);
+
+alter table public.gcash_requests enable row level security;
+drop policy if exists "gcash requests public insert" on public.gcash_requests;
+create policy "gcash requests public insert"
+  on public.gcash_requests
+  for insert
+  to anon, authenticated
+  with check (true);
+
 -- ============================================================
 -- 6. Realtime
 -- ============================================================

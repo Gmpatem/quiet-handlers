@@ -56,12 +56,24 @@ export async function uploadGCashPaymentProof(formData: FormData): Promise<Actio
   }
 }
 
+async function getDbClient() {
+  try {
+    if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      const { supabaseAdmin } = await import("@/lib/supabase/admin");
+      return supabaseAdmin();
+    }
+  } catch (err) {
+    console.warn("Could not load supabaseAdmin, falling back to supabaseServer", err);
+  }
+  return await supabaseServer();
+}
+
 export async function submitGCashRequest(
   data: GCashFormData,
   paymentProofUrl?: string
 ): Promise<ActionResult> {
   try {
-    const supabase = await supabaseServer();
+    const supabase = await getDbClient();
     const settings = await getGCashSettings();
 
     // Authoritative backend fee calculation (never trust client calculation)
@@ -83,22 +95,29 @@ export async function submitGCashRequest(
 
     // Duplicate guard: same contact + same amount within last 30 seconds
     const thirtySecondsAgo = new Date(Date.now() - 30 * 1000).toISOString();
-    const { data: recent } = await supabase
-      .from("gcash_requests")
-      .select("id")
-      .eq("student_contact", data.studentContact.trim())
-      .eq("amount", data.amount)
-      .eq("transaction_type", data.transactionType)
-      .gte("created_at", thirtySecondsAgo)
-      .limit(1);
+    try {
+      const { data: recent } = await supabase
+        .from("gcash_requests")
+        .select("id")
+        .eq("student_contact", data.studentContact.trim())
+        .eq("amount", data.amount)
+        .eq("transaction_type", data.transactionType)
+        .gte("created_at", thirtySecondsAgo)
+        .limit(1);
 
-    if (recent && recent.length > 0) {
-      return { success: false, error: "Duplicate request detected. Please wait a moment." };
+      if (recent && recent.length > 0) {
+        return { success: false, error: "Duplicate request detected. Please wait a moment." };
+      }
+    } catch {
+      // Non-blocking duplicate check
     }
 
-    const { data: inserted, error: insertError } = await supabase
+    const requestId = crypto.randomUUID();
+
+    const { error: insertError } = await supabase
       .from("gcash_requests")
       .insert({
+        id: requestId,
         student_name: data.studentName.trim(),
         student_contact: data.studentContact.trim(),
         transaction_type: data.transactionType,
@@ -108,21 +127,25 @@ export async function submitGCashRequest(
         payment_proof_url: paymentProofUrl || null,
         reference_notes: data.referenceNotes?.trim() || null,
         status: "pending",
-      })
-      .select("id")
-      .single();
+      });
 
     if (insertError) {
       console.error("Database insert error:", insertError);
-      return { success: false, error: insertError.message || "Failed to submit request" };
+      return {
+        success: false,
+        error: "We couldn't submit your GCash request. Please try again or visit Room 411.",
+      };
     }
 
     revalidatePath("/admin/gcash");
     revalidatePath("/admin/qr-services");
-    return { success: true, requestId: inserted?.id };
+    return { success: true, requestId };
   } catch (error: any) {
     console.error("Submit GCash request error:", error);
-    return { success: false, error: error?.message || "Failed to submit request" };
+    return {
+      success: false,
+      error: "We couldn't submit your GCash request. Please try again.",
+    };
   }
 }
 
